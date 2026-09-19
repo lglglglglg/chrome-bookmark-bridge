@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>书签桥</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="hero">
+        <div class="logo">桥</div>
+        <div>
+          <h1>书签桥</h1>
+          <p>不用切换 Google 账号，也能传递书签</p>
+        </div>
+      </header>
+
+      <section class="notice">
+        插件读取的是当前 Chrome 配置文件的书签。账号登录状态不会影响同步码；在目标环境打开插件并粘贴即可。
+      </section>
+
+      <section class="card">
+        <div class="section-heading"><span class="step">1</span><div><h2>发送书签</h2><p>生成一次性可复制的同步码</p></div></div>
+        <label for="source-root">发送哪个位置</label>
+        <select id="source-root"></select>
+        <label for="send-password">设置同步密码</label>
+        <input id="send-password" class="password" type="password" autocomplete="new-password" placeholder="至少 8 位；接收端需要输入同一密码" />
+        <button id="create-token" class="primary">生成加密同步码</button>
+        <div id="send-result" class="result hidden"></div>
+        <textarea id="token-output" class="token" readonly placeholder="同步码会显示在这里"></textarea>
+        <div class="button-row">
+          <button id="copy-token" disabled>复制同步码</button>
+          <button id="download-token" disabled>保存为文件</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-heading"><span class="step">2</span><div><h2>接收并合并</h2><p>粘贴同步码，先预览再写入</p></div></div>
+        <label for="token-input">同步码</label>
+        <textarea id="token-input" class="token input" placeholder="粘贴 BM2. 开头的加密同步码，或导入同步文件"></textarea>
+        <div class="file-row">
+          <label class="file-button" for="token-file">从文件导入</label>
+          <input id="token-file" type="file" accept=".bookmarkbridge,.txt,text/plain" />
+          <span id="file-name">未选择文件</span>
+        </div>
+        <label for="receive-password">同步密码</label>
+        <input id="receive-password" class="password" type="password" autocomplete="current-password" placeholder="输入发送端设置的密码" />
+        <button id="inspect-token">预览同步内容</button>
+        <div id="preview" class="preview hidden"></div>
+        <div id="merge-options" class="hidden">
+          <label for="destination-root">合并到</label>
+          <select id="destination-root"></select>
+          <fieldset>
+            <legend>处理重复项</legend>
+            <label class="radio"><input type="radio" name="merge-mode" value="smart" checked />智能合并：同文件夹内相同网址跳过</label>
+            <label class="radio"><input type="radio" name="merge-mode" value="append" />全部添加：保留原有结构</label>
+          </fieldset>
+          <button id="merge-token" class="primary">确认合并</button>
+        </div>
+        <div id="receive-result" class="result hidden"></div>
+      </section>
+
+      <footer>v0.2 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
