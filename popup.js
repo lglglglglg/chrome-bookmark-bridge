@@ -36,7 +36,7 @@ async function consumePendingImport() {
     if (Date.now() - record.createdAt > IMPORT_MAX_AGE) return;
     $("token-input").value = record.token;
     $("file-name").textContent = record.name || "已导入同步文件";
-    setResult("receive-result", "文件已从独立导入页面载入，请输入同步密码后点击“解密并预览差异”。");
+    setResult("receive-result", "文件已从插件侧边栏载入，请输入同步密码后点击“解密并预览差异”。");
   } catch (_) {
     // IndexedDB 不可用时仍可使用粘贴和拖拽导入，不阻断启动。
   }
@@ -492,9 +492,11 @@ async function importTokenFile(file) {
 
 $("open-file-import").addEventListener("click", async () => {
   try {
-    await extensionApi.tabs.create({ url: extensionApi.runtime.getURL("file-import.html") });
+    if (!extensionApi.sidePanel?.open) throw new Error("当前浏览器版本不支持插件侧边栏，请使用拖拽导入");
+    const currentWindow = await extensionApi.windows.getCurrent();
+    await extensionApi.sidePanel.open({ windowId: currentWindow.id });
   } catch (error) {
-    setResult("receive-result", `无法打开独立导入页面：${error.message || error}`, true);
+    setResult("receive-result", `无法打开插件侧边栏：${error.message || error}`, true);
   }
 });
 $("drop-zone").addEventListener("dragenter", (event) => { event.preventDefault(); $("drop-zone").classList.add("dragover"); });

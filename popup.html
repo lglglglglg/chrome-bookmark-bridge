@@ -49,11 +49,11 @@
           <div class="drop-title">拖拽同步文件到这里</div>
           <div class="drop-subtitle">大同步码推荐拖拽导入，不会打开系统文件窗口</div>
           <div class="file-row">
-            <button id="open-file-import" class="file-button" type="button">在独立页面选择文件</button>
+            <button id="open-file-import" class="file-button" type="button">在侧边栏选择文件</button>
             <span id="file-name">未选择文件</span>
           </div>
         </div>
-        <p class="file-hint">独立页面不会从 Popup 直接唤起文件面板，可避免 Chrome 窗口重新定位。</p>
+        <p class="file-hint">文件会在本浏览器窗口的插件侧边栏选择，不打开独立标签页。</p>
         <div class="receive-password-block">
           <label for="receive-password">同步密码（如发送端设置过）</label>
           <input id="receive-password" class="password" type="password" autocomplete="current-password" placeholder="未加密同步码可留空" />
@@ -80,7 +80,7 @@
 
       <div id="merge-history" class="merge-history hidden"></div>
 
-      <footer>v0.4.4 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
+      <footer>v0.4.5 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
     </main>
     <script src="popup.js"></script>
   </body>
