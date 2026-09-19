@@ -20,10 +20,12 @@
         <span id="browser-name">当前浏览器</span>配置文件生成同步码，目标配置文件接收并合并。
       </section>
 
-      <section class="card">
+      <section class="card send-card">
         <div class="section-heading"><span class="step">1</span><div><h2>发送书签</h2><p>生成一次性可复制的加密同步码</p></div></div>
-        <label for="source-root">发送哪个位置</label>
+        <div class="field-meta"><label for="source-filter">发送哪个位置</label><span id="source-count" class="field-count"></span></div>
+        <input id="source-filter" class="filter-input" type="search" autocomplete="off" placeholder="搜索子文件夹名称或路径（可选）" />
         <select id="source-root"></select>
+        <p class="field-hint">默认显示顶层位置；输入关键词即可定位任意子文件夹。</p>
         <label for="send-password">设置同步密码（可选）</label>
         <input id="send-password" class="password" type="password" autocomplete="new-password" placeholder="留空则不加密；填写后接收端需输入同一密码" />
         <label for="send-password-confirm">确认同步密码</label>
@@ -38,7 +40,7 @@
         <p class="hint">同步码较长时，优先保存为文件并在目标环境导入，成功率更高。</p>
       </section>
 
-      <section class="card">
+      <section class="card receive-card">
         <div class="section-heading"><span class="step">2</span><div><h2>接收并合并</h2><p>粘贴同步码，先预览再写入</p></div></div>
         <label for="token-input">同步码</label>
         <textarea id="token-input" class="token input" placeholder="粘贴 BM2. 开头的同步码，或导入同步文件"></textarea>
@@ -73,7 +75,7 @@
 
       <div id="merge-history" class="merge-history hidden"></div>
 
-      <footer>v0.4 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
+      <footer>v0.4.1 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
     </main>
     <script src="popup.js"></script>
   </body>

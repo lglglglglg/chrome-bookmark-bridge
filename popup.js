@@ -52,23 +52,50 @@ function folderEntries(nodes, depth = 0, parentPath = []) {
   const entries = [];
   for (const node of nodes) {
     if (node.id === "synced") continue;
+    if (node.url) continue;
     const title = rootLabel(node);
     const path = [...parentPath, title];
     entries.push({ node, label: path.join(" / "), depth });
-    if (!node.url && node.children?.length) entries.push(...folderEntries(node.children, depth + 1, path));
+    if (node.children?.length) entries.push(...folderEntries(node.children, depth + 1, path));
   }
   return entries;
 }
 
-function fillRootSelect(select, roots, includeNested = false) {
+function fillRootSelect(select, roots, includeNested = false, query = "") {
   select.replaceChildren();
-  const entries = includeNested ? folderEntries(roots) : roots.filter((root) => root.id !== "synced").map((node) => ({ node, label: rootLabel(node), depth: 0 }));
+  const allEntries = includeNested ? folderEntries(roots) : roots.filter((root) => root.id !== "synced" && !root.url).map((node) => ({ node, label: rootLabel(node), depth: 0 }));
+  const normalized = query.trim().toLocaleLowerCase();
+  const entries = includeNested
+    ? (normalized ? allEntries.filter(({ label }) => label.toLocaleLowerCase().includes(normalized)) : allEntries.filter(({ depth }) => depth === 0))
+    : allEntries;
+  if (!entries.length) {
+    const empty = document.createElement("option");
+    empty.textContent = normalized ? "没有匹配的文件夹" : "没有可用的文件夹";
+    empty.disabled = true;
+    empty.selected = true;
+    select.append(empty);
+    return 0;
+  }
   entries.forEach(({ node, label, depth }) => {
     const option = document.createElement("option");
     option.value = node.id;
-    option.textContent = `${"　".repeat(depth)}${label}`;
+    const parts = label.split(" / ");
+    const display = parts.length > 3 ? `… / ${parts.slice(-3).join(" / ")}` : label;
+    option.textContent = `${"　".repeat(Math.min(depth, 2))}${display}`;
+    option.title = label;
     select.append(option);
   });
+  return entries.length;
+}
+
+function applySourceFilter() {
+  const roots = state.roots[0]?.children || [];
+  const query = $("source-filter").value;
+  const previous = $("source-root").value;
+  const count = fillRootSelect($("source-root"), roots, true, query);
+  if ([...$("source-root").options].some((option) => option.value === previous)) $("source-root").value = previous;
+  else if ($("source-root").options.length && !$("source-root").options[0].disabled) $("source-root").selectedIndex = 0;
+  $("source-count").textContent = query.trim() ? `匹配 ${count} 个位置` : `${count} 个顶层位置`;
 }
 
 function countNodes(node) {
@@ -172,10 +199,12 @@ async function loadRoots() {
   const roots = state.roots[0]?.children || [];
   const sourceValue = $("source-root").value;
   const destinationValue = $("destination-root").value;
-  fillRootSelect($("source-root"), roots, true);
+  const sourceFilter = $("source-filter").value;
+  fillRootSelect($("source-root"), roots, true, sourceFilter);
   fillRootSelect($("destination-root"), roots, false);
   if ([...$("source-root").options].some((option) => option.value === sourceValue)) $("source-root").value = sourceValue;
   if ([...$("destination-root").options].some((option) => option.value === destinationValue)) $("destination-root").value = destinationValue;
+  applySourceFilter();
 }
 
 async function createToken(signal) {
@@ -183,6 +212,7 @@ async function createToken(signal) {
   assertActive(signal);
   const password = $("send-password").value;
   const confirmation = $("send-password-confirm").value;
+  if (!$("source-root").value) throw new Error("请先选择要发送的书签文件夹");
   if (password !== confirmation) throw new Error("两次输入的同步密码不一致");
   if (password && password.length < 8) throw new Error("同步密码如填写，至少需要 8 位");
   updateProgress(true, "读取书签结构…", 10);
@@ -411,6 +441,7 @@ $("inspect-token").addEventListener("click", () => runBusy("inspect-token", insp
 $("merge-token").addEventListener("click", () => runBusy("merge-token", mergeToken));
 $("copy-token").addEventListener("click", () => copyToken().catch((error) => setResult("send-result", error.message || String(error), true)));
 $("download-token").addEventListener("click", downloadToken);
+$("source-filter").addEventListener("input", applySourceFilter);
 $("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
 $("cancel-operation").addEventListener("click", () => { if (state.operation) state.operation.abort(); });
 $("token-file").addEventListener("change", async (event) => {
