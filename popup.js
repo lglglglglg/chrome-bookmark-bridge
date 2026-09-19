@@ -5,7 +5,7 @@ const PBKDF2_ITERATIONS = 210000;
 const extensionApi = globalThis.chrome ?? globalThis.browser;
 
 const $ = (id) => document.getElementById(id);
-const state = { roots: [], incoming: null, lastMerge: null, sendSummary: "" };
+const state = { roots: [], incoming: null, sendSummary: "", mergeHistory: [], operation: null, progressTimer: null };
 
 function setResult(id, message, error = false) {
   const el = $(id);
@@ -17,9 +17,31 @@ function setResult(id, message, error = false) {
 function clearResult(id) { $(id).classList.add("hidden"); }
 
 function updateProgress(visible, message = "", value = 0) {
+  if (state.progressTimer) { clearTimeout(state.progressTimer); state.progressTimer = null; }
   $("progress-wrap").classList.toggle("hidden", !visible);
   $("progress-label").textContent = message;
   $("progress-bar").value = Math.max(0, Math.min(100, value));
+  $("cancel-operation").classList.toggle("hidden", !visible || !state.operation);
+}
+
+function scheduleProgressHide(delay = 900) {
+  if (state.progressTimer) clearTimeout(state.progressTimer);
+  state.progressTimer = setTimeout(() => updateProgress(false), delay);
+}
+
+function beginOperation() {
+  const controller = new AbortController();
+  state.operation = controller;
+  return controller.signal;
+}
+
+function endOperation() {
+  state.operation = null;
+  $("cancel-operation").classList.add("hidden");
+}
+
+function assertActive(signal) {
+  if (signal?.aborted) { const error = new Error("操作已取消"); error.code = "ABORTED"; throw error; }
 }
 
 function rootLabel(node) {
@@ -156,78 +178,128 @@ async function loadRoots() {
   if ([...$("destination-root").options].some((option) => option.value === destinationValue)) $("destination-root").value = destinationValue;
 }
 
-async function createToken() {
+async function createToken(signal) {
   clearResult("send-result");
+  assertActive(signal);
   const password = $("send-password").value;
   const confirmation = $("send-password-confirm").value;
   if (password !== confirmation) throw new Error("两次输入的同步密码不一致");
   if (password && password.length < 8) throw new Error("同步密码如填写，至少需要 8 位");
   updateProgress(true, "读取书签结构…", 10);
   const [root] = await extensionApi.bookmarks.getSubTree($("source-root").value);
+  assertActive(signal);
   const counts = countNodes(root);
   updateProgress(true, password ? `正在压缩并加密 ${counts.items} 项…` : `正在准备 ${counts.items} 项同步内容…`, 45);
   const payload = { v: 2, kind: "chrome-bookmark-bridge", createdAt: new Date().toISOString(), root: serialiseNode(root) };
   const token = await encodeToken(payload, password);
+  assertActive(signal);
   $("token-output").value = token;
   $("copy-token").disabled = false;
   $("download-token").disabled = false;
   updateProgress(true, password ? "加密同步码已生成" : "同步码已生成", 100);
   const securityText = password ? "已加密" : "未加密";
   state.sendSummary = `已生成${securityText}同步码：${counts.folders} 个文件夹、${counts.bookmarks} 个书签。同步码 ${token.length.toLocaleString()} 字符。${password ? "" : "建议设置密码后再跨设备传递。"}`;
+  const largeToken = token.length > 12000;
+  const downloadButton = $("download-token");
+  downloadButton.classList.toggle("recommended", largeToken);
+  downloadButton.title = largeToken ? "同步码较长，建议优先保存为文件并在目标环境导入" : "将同步码保存为 .bookmarkbridge 文件";
+  if (largeToken) state.sendSummary += "\n同步码较长，建议优先点击“保存为文件”，再在目标环境使用“从文件导入”。";
   setResult("send-result", state.sendSummary);
-  setTimeout(() => updateProgress(false), 1200);
+  scheduleProgressHide(1200);
 }
 
-async function calculateDiff(parentId, children, stats) {
+function recordDiff(stats, status, kind, path) {
+  stats.total += 1;
+  if (stats.entries.length < 200) stats.entries.push({ status, kind, path });
+}
+
+function recordNewSubtree(node, path, stats, signal) {
+  assertActive(signal);
+  if (node.url) {
+    stats.bookmarks += 1;
+    recordDiff(stats, "add", "新增书签", path);
+    return;
+  }
+  stats.folders += 1;
+  recordDiff(stats, "add", "新增文件夹", path);
+  for (const child of node.children || []) recordNewSubtree(child, `${path} / ${child.title || "未命名"}`, stats, signal);
+}
+
+async function calculateDiff(parentId, children, stats, parentPath, signal) {
+  assertActive(signal);
   const existing = await extensionApi.bookmarks.getChildren(parentId);
   const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
   const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
   for (const child of children || []) {
+    assertActive(signal);
+    const path = `${parentPath} / ${child.title || "未命名"}`;
     if (child.url) {
       const duplicate = urlSet.has(`${child.url}\u0000${child.title}`);
-      if (duplicate) stats.skipped += 1; else stats.bookmarks += 1;
+      if (duplicate) { stats.skipped += 1; recordDiff(stats, "skip", "跳过重复", path); }
+      else { stats.bookmarks += 1; recordDiff(stats, "add", "新增书签", path); urlSet.add(`${child.url}\u0000${child.title}`); }
     } else {
       const folder = folderMap.get(child.title);
-      if (folder) await calculateDiff(folder.id, child.children, stats);
-      else { const nested = countNodes(child); stats.folders += 1 + nested.folders; stats.bookmarks += nested.bookmarks; }
+      if (folder) { stats.reusedFolders += 1; recordDiff(stats, "reuse", "复用文件夹", path); await calculateDiff(folder.id, child.children, stats, path, signal); }
+      else recordNewSubtree(child, path, stats, signal);
     }
   }
 }
 
-async function renderPreview() {
+async function renderPreview(signal) {
   if (!state.incoming) return;
   const destination = $("destination-root").selectedOptions[0]?.textContent || "目标位置";
   const sourceCounts = countNodes(state.incoming.root);
-  const diff = { bookmarks: 0, folders: 0, skipped: 0 };
-  await calculateDiff($("destination-root").value, state.incoming.root.children, diff);
+  const diff = { bookmarks: 0, folders: 0, skipped: 0, reusedFolders: 0, total: 0, entries: [] };
+  await calculateDiff($("destination-root").value, state.incoming.root.children, diff, state.incoming.root.title || "来源", signal);
   state.diff = diff;
-  $("preview").textContent = `来源：${state.incoming.root.title || "未命名"} ｜ 创建时间：${new Date(state.incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，跳过 ${diff.skipped} 个重复项`;
-  $("preview").classList.remove("hidden");
+  const preview = $("preview");
+  preview.replaceChildren();
+  const summary = document.createElement("div");
+  summary.textContent = `来源：${state.incoming.root.title || "未命名"} ｜ 创建时间：${new Date(state.incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，复用 ${diff.reusedFolders} 个文件夹，跳过 ${diff.skipped} 个重复项`;
+  preview.append(summary);
+  const list = document.createElement("ul");
+  list.className = "diff-list";
+  for (const item of diff.entries) {
+    const row = document.createElement("li");
+    row.className = item.status;
+    row.textContent = `${item.kind} · ${item.path}`;
+    list.append(row);
+  }
+  preview.append(list);
+  if (diff.total > diff.entries.length) {
+    const more = document.createElement("div");
+    more.className = "diff-more";
+    more.textContent = `已显示前 ${diff.entries.length} 条，另有 ${diff.total - diff.entries.length} 条；完整内容仍会按预览结果合并。`;
+    preview.append(more);
+  }
+  preview.classList.remove("hidden");
 }
 
-async function inspectToken() {
+async function inspectToken(signal) {
   clearResult("receive-result");
   updateProgress(true, "解密并检查同步码…", 35);
   try {
     state.incoming = await decodeToken($("token-input").value, $("receive-password").value);
+    assertActive(signal);
     $("merge-options").classList.remove("hidden");
-    await renderPreview();
+    await renderPreview(signal);
     updateProgress(true, "差异预览已完成", 100);
-    setTimeout(() => updateProgress(false), 800);
+    scheduleProgressHide(800);
   } catch (error) {
     state.incoming = null;
     $("preview").classList.add("hidden");
     $("merge-options").classList.add("hidden");
     updateProgress(false);
-    setResult("receive-result", error.message || "无法解析同步码", true);
+    setResult("receive-result", error.code === "ABORTED" ? "已取消预览。" : (error.message || "无法解析同步码"), error.code !== "ABORTED");
   }
 }
 
-async function mergeChildren(parentId, children, mode, stats) {
+async function mergeChildren(parentId, children, mode, stats, signal) {
   const existing = mode === "smart" ? await extensionApi.bookmarks.getChildren(parentId) : [];
   const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
   const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
   for (const child of children || []) {
+    assertActive(signal);
     stats.processed += 1;
     updateProgress(true, `正在合并：${stats.processed}/${stats.total} 项`, 25 + (stats.processed / stats.total) * 70);
     if (child.url) {
@@ -240,50 +312,77 @@ async function mergeChildren(parentId, children, mode, stats) {
     } else {
       let folder = mode === "smart" ? folderMap.get(child.title) : null;
       if (!folder) { folder = await extensionApi.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; stats.createdNodes.push({ id: folder.id, type: "folder" }); folderMap.set(child.title, folder); }
-      await mergeChildren(folder.id, child.children, mode, stats);
+      await mergeChildren(folder.id, child.children, mode, stats, signal);
     }
   }
 }
 
-async function mergeToken() {
+function addMergeHistory(stats, partial = false) {
+  if (!stats.createdNodes.length) return;
+  state.mergeHistory.unshift({ createdNodes: [...stats.createdNodes], createdAt: new Date(), bookmarks: stats.bookmarks, folders: stats.folders, skipped: stats.skipped, partial });
+  renderMergeHistory();
+}
+
+function renderMergeHistory() {
+  const container = $("merge-history");
+  container.replaceChildren();
+  if (!state.mergeHistory.length) { container.classList.add("hidden"); return; }
+  container.classList.remove("hidden");
+  const title = document.createElement("div");
+  title.className = "history-title";
+  title.textContent = "本次弹窗会话的合并历史";
+  container.append(title);
+  state.mergeHistory.forEach((record, index) => {
+    const row = document.createElement("div");
+    row.className = "history-row";
+    const text = document.createElement("span");
+    text.textContent = `${record.createdAt.toLocaleTimeString()} · 新增 ${record.bookmarks} 个书签、${record.folders} 个文件夹${record.partial ? "（已取消）" : ""}`;
+    const button = document.createElement("button");
+    button.textContent = "撤销";
+    button.addEventListener("click", () => runBusy(button, (signal) => undoMerge(index, signal)).catch((error) => {
+      updateProgress(false);
+      setResult("receive-result", error.code === "ABORTED" ? "已取消撤销，剩余内容仍保留在该条历史记录中。" : (error.message || String(error)), error.code !== "ABORTED");
+    }));
+    row.append(text, button);
+    container.append(row);
+  });
+}
+
+async function mergeToken(signal) {
   if (!state.incoming) return;
   const mode = document.querySelector('input[name="merge-mode"]:checked').value;
   const stats = { bookmarks: 0, folders: 0, skipped: 0, processed: 0, total: Math.max(1, countNodes(state.incoming.root).items), createdNodes: [] };
   updateProgress(true, "准备合并…", 20);
   try {
-    await mergeChildren($("destination-root").value, state.incoming.root.children, mode, stats);
-    state.lastMerge = { createdNodes: stats.createdNodes };
-    $("undo-merge").classList.toggle("hidden", stats.createdNodes.length === 0);
+    await mergeChildren($("destination-root").value, state.incoming.root.children, mode, stats, signal);
+    addMergeHistory(stats);
     setResult("receive-result", `合并完成：新增 ${stats.bookmarks} 个书签、${stats.folders} 个文件夹，跳过 ${stats.skipped} 个重复项。`);
     updateProgress(true, "合并完成", 100);
     await loadRoots();
-    await renderPreview();
-    setTimeout(() => updateProgress(false), 1200);
+    await renderPreview(signal);
+    scheduleProgressHide(1200);
   } catch (error) {
-    if (stats.createdNodes.length) {
-      state.lastMerge = { createdNodes: stats.createdNodes };
-      $("undo-merge").classList.remove("hidden");
-    }
+    if (stats.createdNodes.length) addMergeHistory(stats, true);
     updateProgress(false);
-    setResult("receive-result", `合并失败：${error.message || error}`, true);
+    setResult("receive-result", error.code === "ABORTED" ? "已取消合并；已创建内容已记录在合并历史中，可单独撤销。" : `合并失败：${error.message || error}`, error.code !== "ABORTED");
   }
 }
 
-async function undoMerge() {
-  if (!state.lastMerge?.createdNodes?.length) return;
-  $("undo-merge").disabled = true;
+async function undoMerge(index, signal) {
+  const record = state.mergeHistory[index];
+  if (!record?.createdNodes?.length) return;
   updateProgress(true, "正在撤销本次合并…", 50);
-  for (const node of [...state.lastMerge.createdNodes].reverse()) {
+  for (const node of [...record.createdNodes].reverse()) {
+    assertActive(signal);
     try {
       if (node.type === "folder") await extensionApi.bookmarks.removeTree(node.id);
       else await extensionApi.bookmarks.remove(node.id);
     } catch (_) { /* already removed or moved; continue cleanup */ }
   }
-  state.lastMerge = null;
-  $("undo-merge").classList.add("hidden");
-  $("undo-merge").disabled = false;
+  state.mergeHistory.splice(index, 1);
+  renderMergeHistory();
   await loadRoots();
-  if (state.incoming) await renderPreview();
+  if (state.incoming) await renderPreview(signal);
   updateProgress(false);
   setResult("receive-result", "已撤销本次合并，目标端原有书签未受影响。");
 }
@@ -294,9 +393,10 @@ async function copyToken() {
 }
 
 async function runBusy(buttonId, task) {
-  const button = $(buttonId);
+  const button = typeof buttonId === "string" ? $(buttonId) : buttonId;
   button.disabled = true;
-  try { await task(); } finally { button.disabled = false; }
+  const signal = beginOperation();
+  try { await task(signal); } finally { endOperation(); button.disabled = false; }
 }
 
 function downloadToken() {
@@ -306,13 +406,13 @@ function downloadToken() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-$("create-token").addEventListener("click", () => runBusy("create-token", createToken).catch((error) => { updateProgress(false); setResult("send-result", error.message || String(error), true); }));
+$("create-token").addEventListener("click", () => runBusy("create-token", createToken).catch((error) => { updateProgress(false); setResult("send-result", error.code === "ABORTED" ? "已取消生成。" : (error.message || String(error)), error.code !== "ABORTED"); }));
 $("inspect-token").addEventListener("click", () => runBusy("inspect-token", inspectToken));
 $("merge-token").addEventListener("click", () => runBusy("merge-token", mergeToken));
-$("undo-merge").addEventListener("click", () => runBusy("undo-merge", undoMerge).catch((error) => setResult("receive-result", error.message || String(error), true)));
 $("copy-token").addEventListener("click", () => copyToken().catch((error) => setResult("send-result", error.message || String(error), true)));
 $("download-token").addEventListener("click", downloadToken);
 $("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
+$("cancel-operation").addEventListener("click", () => { if (state.operation) state.operation.abort(); });
 $("token-file").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;

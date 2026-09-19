@@ -35,6 +35,7 @@
           <button id="copy-token" disabled>复制同步码</button>
           <button id="download-token" disabled>保存为文件</button>
         </div>
+        <p class="hint">同步码较长时，优先保存为文件并在目标环境导入，成功率更高。</p>
       </section>
 
       <section class="card">
@@ -44,7 +45,7 @@
         <div class="file-row">
           <label class="file-button" for="token-file">从文件导入</label>
           <input id="token-file" type="file" accept=".bookmarkbridge,.txt,text/plain" />
-          <span id="file-name">未选择文件</span>
+          <span id="file-name">未选择文件（大同步码推荐此方式）</span>
         </div>
         <div class="receive-password-block">
           <label for="receive-password">同步密码（如发送端设置过）</label>
@@ -63,15 +64,16 @@
           <button id="merge-token" class="primary">确认合并</button>
         </div>
         <div id="receive-result" class="result hidden"></div>
-        <button id="undo-merge" class="undo hidden">撤销本次合并</button>
       </section>
 
       <div id="progress-wrap" class="progress-wrap hidden">
-        <div id="progress-label"></div>
+        <div class="progress-line"><span id="progress-label"></span><button id="cancel-operation" class="cancel hidden">取消</button></div>
         <progress id="progress-bar" max="100" value="0"></progress>
       </div>
 
-      <footer>v0.3 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
+      <div id="merge-history" class="merge-history hidden"></div>
+
+      <footer>v0.4 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
     </main>
     <script src="popup.js"></script>
   </body>
