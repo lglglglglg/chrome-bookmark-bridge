@@ -24,8 +24,9 @@
         <div class="section-heading"><span class="step">1</span><div><h2>发送书签</h2><p>生成一次性可复制的加密同步码</p></div></div>
         <div class="field-meta"><label for="source-filter">发送哪个位置</label><span id="source-count" class="field-count"></span></div>
         <input id="source-filter" class="filter-input" type="search" autocomplete="off" placeholder="搜索子文件夹名称或路径（可选）" />
-        <select id="source-root"></select>
-        <p class="field-hint">默认显示顶层位置；输入关键词即可定位任意子文件夹。</p>
+        <div class="select-wrap"><select id="source-root"></select></div>
+        <button id="toggle-source-tree" class="link-button" type="button">浏览全部子文件夹</button>
+        <p class="field-hint">默认显示顶层和一级子文件夹；不确定关键词时可浏览全部位置。</p>
         <label for="send-password">设置同步密码（可选）</label>
         <input id="send-password" class="password" type="password" autocomplete="new-password" placeholder="留空则不加密；填写后接收端需输入同一密码" />
         <label for="send-password-confirm">确认同步密码</label>
@@ -49,6 +50,7 @@
           <input id="token-file" type="file" accept=".bookmarkbridge,.txt,text/plain" />
           <span id="file-name">未选择文件（大同步码推荐此方式）</span>
         </div>
+        <p class="file-hint">点击“从文件导入”会打开系统文件窗口，这是正常的安全提示。</p>
         <div class="receive-password-block">
           <label for="receive-password">同步密码（如发送端设置过）</label>
           <input id="receive-password" class="password" type="password" autocomplete="current-password" placeholder="未加密同步码可留空" />
@@ -57,7 +59,7 @@
         <div id="preview" class="preview hidden"></div>
         <div id="merge-options" class="hidden">
           <label for="destination-root">合并到</label>
-          <select id="destination-root"></select>
+          <div class="select-wrap"><select id="destination-root"></select></div>
           <fieldset>
             <legend>处理重复项</legend>
             <label class="radio"><input type="radio" name="merge-mode" value="smart" checked />智能合并：同文件夹内相同网址跳过</label>
@@ -75,7 +77,7 @@
 
       <div id="merge-history" class="merge-history hidden"></div>
 
-      <footer>v0.4.1 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
+      <footer>v0.4.2 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
     </main>
     <script src="popup.js"></script>
   </body>

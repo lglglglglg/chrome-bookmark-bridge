@@ -31,6 +31,9 @@ label, legend { display: block; font-size: 12px; color: #596273; margin: 11px 0 
 .field-hint, .hint { color: #7b8494; font-size: 10px; line-height: 1.45; margin: 6px 2px 0; }
 select, textarea, input.password, .filter-input { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); padding: 10px; font: inherit; font-size: 13px; transition: border-color .15s, box-shadow .15s; }
 select, input.password, .filter-input { height: 38px; }
+.select-wrap { position: relative; }
+.select-wrap select { appearance: none; -webkit-appearance: none; padding-right: 36px; }
+.select-wrap::after { content: ""; position: absolute; right: 15px; top: 50%; width: 8px; height: 8px; border-right: 2px solid #596273; border-bottom: 2px solid #596273; transform: translateY(-68%) rotate(45deg); pointer-events: none; }
 .filter-input { margin-bottom: 7px; background: #fafbfe; }
 select:focus, textarea:focus, input.password:focus, .filter-input:focus { outline: none; border-color: #7b82e9; box-shadow: 0 0 0 3px #e0e3ff; }
 textarea { resize: vertical; min-height: 74px; line-height: 1.45; }
@@ -44,12 +47,15 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .primary:hover:not(:disabled) { background: linear-gradient(135deg, var(--primary-dark), #6954cc); }
 .button-row { display: flex; gap: 8px; margin-top: 9px; }
 .button-row button { flex: 1; }
+.link-button { min-height: auto; border: 0; padding: 7px 2px 0; color: #5963c8; background: transparent; font-size: 11px; }
+.link-button:hover:not(:disabled) { background: transparent; color: #3f49af; text-decoration: underline; }
 .button-row .recommended { border-color: #5d65df; color: #39458b; background: var(--soft-blue); box-shadow: 0 0 0 2px #dbe3ff; }
 .file-row { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: #7b8494; font-size: 11px; min-width: 0; }
 .file-row input[type=file] { display: none; }
 .file-button { display: inline-block; flex: 0 0 auto; margin: 0; padding: 8px 10px; border: 1px solid #d2d7e2; border-radius: 10px; color: #273248; background: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
 .file-button:hover { background: #f1f3f8; }
 #file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-hint { color: #8b93a3; font-size: 10px; line-height: 1.4; margin: 6px 2px 0; }
 .receive-password-block { margin-top: 14px; padding-top: 4px; border-top: 1px solid #eef0f5; }
 .receive-password-block button { width: 100%; margin-top: 13px; }
 .result { border-radius: 10px; padding: 10px 11px; margin-top: 11px; font-size: 12px; line-height: 1.5; background: #f0fdf4; color: #166534; white-space: pre-line; }

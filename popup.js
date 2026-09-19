@@ -5,7 +5,7 @@ const PBKDF2_ITERATIONS = 210000;
 const extensionApi = globalThis.chrome ?? globalThis.browser;
 
 const $ = (id) => document.getElementById(id);
-const state = { roots: [], incoming: null, sendSummary: "", mergeHistory: [], operation: null, progressTimer: null };
+const state = { roots: [], incoming: null, sendSummary: "", mergeHistory: [], operation: null, progressTimer: null, sourceExpanded: false };
 
 function setResult(id, message, error = false) {
   const el = $(id);
@@ -66,7 +66,7 @@ function fillRootSelect(select, roots, includeNested = false, query = "") {
   const allEntries = includeNested ? folderEntries(roots) : roots.filter((root) => root.id !== "synced" && !root.url).map((node) => ({ node, label: rootLabel(node), depth: 0 }));
   const normalized = query.trim().toLocaleLowerCase();
   const entries = includeNested
-    ? (normalized ? allEntries.filter(({ label }) => label.toLocaleLowerCase().includes(normalized)) : allEntries.filter(({ depth }) => depth === 0))
+    ? (normalized ? allEntries.filter(({ label }) => label.toLocaleLowerCase().includes(normalized)) : (state.sourceExpanded ? allEntries : allEntries.filter(({ depth }) => depth <= 1)))
     : allEntries;
   if (!entries.length) {
     const empty = document.createElement("option");
@@ -95,7 +95,8 @@ function applySourceFilter() {
   const count = fillRootSelect($("source-root"), roots, true, query);
   if ([...$("source-root").options].some((option) => option.value === previous)) $("source-root").value = previous;
   else if ($("source-root").options.length && !$("source-root").options[0].disabled) $("source-root").selectedIndex = 0;
-  $("source-count").textContent = query.trim() ? `匹配 ${count} 个位置` : `${count} 个顶层位置`;
+  $("source-count").textContent = query.trim() ? `匹配 ${count} 个位置` : `${count} 个可选位置`;
+  $("toggle-source-tree").textContent = state.sourceExpanded ? "收起子文件夹" : "浏览全部子文件夹";
 }
 
 function countNodes(node) {
@@ -442,6 +443,7 @@ $("merge-token").addEventListener("click", () => runBusy("merge-token", mergeTok
 $("copy-token").addEventListener("click", () => copyToken().catch((error) => setResult("send-result", error.message || String(error), true)));
 $("download-token").addEventListener("click", downloadToken);
 $("source-filter").addEventListener("input", applySourceFilter);
+$("toggle-source-tree").addEventListener("click", () => { state.sourceExpanded = !state.sourceExpanded; applySourceFilter(); });
 $("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
 $("cancel-operation").addEventListener("click", () => { if (state.operation) state.operation.abort(); });
 $("token-file").addEventListener("change", async (event) => {
