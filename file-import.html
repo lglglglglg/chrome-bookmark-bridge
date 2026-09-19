@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>书签桥 · 选择同步文件</title>
+    <link rel="stylesheet" href="file-import.css" />
+  </head>
+  <body>
+    <main class="import-page">
+      <header class="import-hero">
+        <img src="icon-48.png" alt="书签桥" />
+        <div><h1>导入同步文件</h1><p>在独立页面选择文件，避免 Popup 触发浏览器窗口重排</p></div>
+      </header>
+      <section id="drop-zone" class="import-drop" tabindex="0">
+        <input id="file-input" type="file" accept=".bookmarkbridge,.txt,text/plain" />
+        <div class="drop-icon">↓</div>
+        <h2>拖拽文件到这里</h2>
+        <p>支持 .bookmarkbridge 或 .txt 文件</p>
+        <label class="choose-button" for="file-input">选择同步文件</label>
+      </section>
+      <div id="status" class="status" role="status">文件只会暂存在本机，返回扩展后会自动载入。</div>
+      <p class="back-hint">完成后回到浏览器工具栏，重新打开“书签桥”即可继续预览和合并。</p>
+    </main>
+    <script src="file-import.js"></script>
+  </body>
+</html>

@@ -6,6 +6,41 @@ const extensionApi = globalThis.chrome ?? globalThis.browser;
 
 const $ = (id) => document.getElementById(id);
 const state = { roots: [], incoming: null, sendSummary: "", mergeHistory: [], operation: null, progressTimer: null, sourceExpanded: false };
+const IMPORT_DB_NAME = "bookmarkBridgeImport";
+const IMPORT_STORE_NAME = "pending";
+const IMPORT_MAX_AGE = 10 * 60 * 1000;
+
+function openImportDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(IMPORT_DB_NAME, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(IMPORT_STORE_NAME);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("无法打开导入缓存"));
+  });
+}
+
+async function consumePendingImport() {
+  try {
+    const db = await openImportDb();
+    const record = await new Promise((resolve, reject) => {
+      const request = db.transaction(IMPORT_STORE_NAME, "readonly").objectStore(IMPORT_STORE_NAME).get("token");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    if (!record) return;
+    await new Promise((resolve, reject) => {
+      const request = db.transaction(IMPORT_STORE_NAME, "readwrite").objectStore(IMPORT_STORE_NAME).delete("token");
+      request.onsuccess = resolve;
+      request.onerror = () => reject(request.error);
+    });
+    if (Date.now() - record.createdAt > IMPORT_MAX_AGE) return;
+    $("token-input").value = record.token;
+    $("file-name").textContent = record.name || "已导入同步文件";
+    setResult("receive-result", "文件已从独立导入页面载入，请输入同步密码后点击“解密并预览差异”。");
+  } catch (_) {
+    // IndexedDB 不可用时仍可使用粘贴和拖拽导入，不阻断启动。
+  }
+}
 
 function setResult(id, message, error = false) {
   const el = $(id);
@@ -455,7 +490,13 @@ async function importTokenFile(file) {
   } catch (error) { setResult("receive-result", `文件读取失败：${error.message || error}`, true); }
 }
 
-$("token-file").addEventListener("change", (event) => importTokenFile(event.target.files?.[0]));
+$("open-file-import").addEventListener("click", async () => {
+  try {
+    await extensionApi.tabs.create({ url: extensionApi.runtime.getURL("file-import.html") });
+  } catch (error) {
+    setResult("receive-result", `无法打开独立导入页面：${error.message || error}`, true);
+  }
+});
 $("drop-zone").addEventListener("dragenter", (event) => { event.preventDefault(); $("drop-zone").classList.add("dragover"); });
 $("drop-zone").addEventListener("dragover", (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; $("drop-zone").classList.add("dragover"); });
 $("drop-zone").addEventListener("dragleave", (event) => { if (!event.currentTarget.contains(event.relatedTarget)) $("drop-zone").classList.remove("dragover"); });
@@ -466,11 +507,12 @@ $("drop-zone").addEventListener("drop", (event) => {
   if (file) importTokenFile(file);
   else setResult("receive-result", "请拖入 .bookmarkbridge 或 .txt 同步文件。", true);
 });
-$("drop-zone").addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") $("token-file").click(); });
+$("drop-zone").addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") $("open-file-import").click(); });
 
 (async function init() {
   try {
     await loadRoots();
+    await consumePendingImport();
     const browserName = /Edg\//.test(navigator.userAgent) ? "Edge" : /Chrome\//.test(navigator.userAgent) ? "Chrome" : "当前浏览器";
     $("browser-name").textContent = browserName;
   } catch (error) { setResult("send-result", `无法读取当前书签：${error.message || error}`, true); }

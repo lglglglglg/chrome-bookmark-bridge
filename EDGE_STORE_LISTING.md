@@ -4,8 +4,8 @@
 
 - 产品名：书签桥 · 加密书签同步
 - 建议分类：生产力工具
-- 版本：0.4.3
-- 发布包：`dist/书签桥-edge-v0.4.3.zip`
+- 版本：0.4.4
+- 发布包：`dist/书签桥-edge-v0.4.4.zip`
 - 项目主页：`https://github.com/lglglglglg/chrome-bookmark-bridge`
 - 隐私政策：发布 GitHub Pages 后填写公开 URL
 
@@ -35,5 +35,5 @@ Edge 版本不维护第二套代码。当前 ZIP 与 Chrome 版运行文件相�
 - [ ] 在 `edge://extensions` 用开发者模式加载本目录测试。
 - [ ] 在两个 Edge 配置文件中完成加密发送、文件导入、差异预览、合并和撤销测试。
 - [ ] 在 Partner Center 创建 Microsoft Edge 扩展开发者账号。
-- [ ] 上传 `dist/书签桥-edge-v0.4.3.zip`。
+- [ ] 上传 `dist/书签桥-edge-v0.4.4.zip`。
 - [ ] 填写 Edge 商店截图、隐私政策和权限用途。

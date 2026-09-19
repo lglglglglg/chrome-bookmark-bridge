@@ -49,12 +49,11 @@
           <div class="drop-title">拖拽同步文件到这里</div>
           <div class="drop-subtitle">大同步码推荐拖拽导入，不会打开系统文件窗口</div>
           <div class="file-row">
-            <label class="file-button" for="token-file">选择文件</label>
-            <input id="token-file" type="file" accept=".bookmarkbridge,.txt,text/plain" />
+            <button id="open-file-import" class="file-button" type="button">在独立页面选择文件</button>
             <span id="file-name">未选择文件</span>
           </div>
         </div>
-        <p class="file-hint">点击“选择文件”会打开系统文件窗口；拖拽导入可避免窗口重新定位。</p>
+        <p class="file-hint">独立页面不会从 Popup 直接唤起文件面板，可避免 Chrome 窗口重新定位。</p>
         <div class="receive-password-block">
           <label for="receive-password">同步密码（如发送端设置过）</label>
           <input id="receive-password" class="password" type="password" autocomplete="current-password" placeholder="未加密同步码可留空" />
@@ -81,7 +80,7 @@
 
       <div id="merge-history" class="merge-history hidden"></div>
 
-      <footer>v0.4.3 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
+      <footer>v0.4.4 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
     </main>
     <script src="popup.js"></script>
   </body>

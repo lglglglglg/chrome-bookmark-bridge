@@ -1,0 +1,18 @@
+:root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; color: #172033; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 420px; min-height: 100vh; background: linear-gradient(150deg, #f7f8fc, #edf1fb); }
+.import-page { width: min(680px, calc(100vw - 40px)); margin: 0 auto; padding: 56px 0; }
+.import-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+.import-hero img { width: 48px; height: 48px; border-radius: 15px; box-shadow: 0 7px 16px #6068dc33; }
+h1, h2, p { margin: 0; }
+h1 { font-size: 24px; } .import-hero p { margin-top: 5px; color: #6b7280; font-size: 13px; }
+.import-drop { padding: 72px 24px; text-align: center; border: 2px dashed #cbd2e1; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px #1d2c5412; transition: border-color .15s, background .15s, box-shadow .15s; }
+.import-drop:focus, .import-drop.dragover { outline: none; border-color: #5d65df; background: #eef2ff; box-shadow: 0 0 0 4px #dbe3ff, 0 8px 24px #1d2c5412; }
+.import-drop input { display: none; }
+.drop-icon { width: 48px; height: 48px; margin: 0 auto 12px; display: grid; place-items: center; border-radius: 16px; color: #fff; background: linear-gradient(135deg, #5d65df, #8560d9); font-size: 26px; }
+.import-drop h2 { font-size: 18px; } .import-drop p { margin-top: 6px; color: #7b8494; font-size: 13px; }
+.choose-button { display: inline-block; margin-top: 20px; padding: 11px 18px; border-radius: 10px; color: #fff; background: #5d65df; font-size: 13px; font-weight: 700; cursor: pointer; }
+.choose-button:hover { background: #4d56cf; }
+.status { margin-top: 16px; padding: 11px 13px; border-radius: 10px; color: #39458b; background: #eef2ff; font-size: 12px; line-height: 1.5; }
+.status.success { color: #166534; background: #f0fdf4; } .status.error { color: #9f1239; background: #fff1f2; }
+.back-hint { margin-top: 12px; color: #8b93a3; font-size: 11px; text-align: center; }
