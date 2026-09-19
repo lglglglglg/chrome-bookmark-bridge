@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="12" y1="12" x2="116" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B8DF7"/>
+      <stop offset="0.48" stop-color="#6267E5"/>
+      <stop offset="1" stop-color="#8A4DDB"/>
+    </linearGradient>
+    <linearGradient id="bridge" x1="42" y1="47" x2="86" y2="85" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DDFBFF"/>
+      <stop offset="1" stop-color="#78E9FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  <path d="M23 29C23 24.582 26.582 21 31 21H54V94L38.5 83.5L23 94V29Z" fill="white" fill-opacity=".96"/>
+  <path d="M74 21H97C101.418 21 105 24.582 105 29V94L89.5 83.5L74 94V21Z" fill="white" fill-opacity=".96"/>
+  <path d="M34 70C48.6 49.333 79.4 49.333 94 70V83C78.6 62.333 49.4 62.333 34 83V70Z" fill="url(#bridge)"/>
+  <path d="M51 65V77M64 61V74M77 65V77" stroke="#5560D8" stroke-width="5" stroke-linecap="round"/>
+  <path d="M31 31H46M82 31H97" stroke="#DFFBFF" stroke-opacity=".8" stroke-width="4" stroke-linecap="round"/>
+</svg>
