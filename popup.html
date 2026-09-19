@@ -9,26 +9,26 @@
   <body>
     <main class="app">
       <header class="hero">
-        <div class="logo">桥</div>
+        <img class="logo" src="icon-48.png" alt="书签桥" />
         <div>
           <h1>书签桥</h1>
-          <p>不用切换 Google 账号，也能传递书签</p>
+          <p>跨浏览器配置文件快速同步书签</p>
         </div>
       </header>
 
       <section class="notice">
-        插件读取的是当前 Chrome 配置文件的书签。账号登录状态不会影响同步码；在目标环境打开插件并粘贴即可。
+        <span id="browser-name">当前浏览器</span>配置文件生成同步码，目标配置文件接收并合并。
       </section>
 
       <section class="card">
         <div class="section-heading"><span class="step">1</span><div><h2>发送书签</h2><p>生成一次性可复制的加密同步码</p></div></div>
         <label for="source-root">发送哪个位置</label>
         <select id="source-root"></select>
-        <label for="send-password">设置同步密码</label>
-        <input id="send-password" class="password" type="password" autocomplete="new-password" placeholder="至少 8 位；接收端需要输入同一密码" />
+        <label for="send-password">设置同步密码（可选）</label>
+        <input id="send-password" class="password" type="password" autocomplete="new-password" placeholder="留空则不加密；填写后接收端需输入同一密码" />
         <label for="send-password-confirm">确认同步密码</label>
-        <input id="send-password-confirm" class="password" type="password" autocomplete="new-password" placeholder="再次输入同步密码" />
-        <button id="create-token" class="primary">生成加密同步码</button>
+        <input id="send-password-confirm" class="password" type="password" autocomplete="new-password" placeholder="再次输入（留空时也留空）" />
+        <button id="create-token" class="primary">生成同步码</button>
         <div id="send-result" class="result hidden"></div>
         <textarea id="token-output" class="token" readonly placeholder="同步码会显示在这里"></textarea>
         <div class="button-row">
@@ -40,15 +40,17 @@
       <section class="card">
         <div class="section-heading"><span class="step">2</span><div><h2>接收并合并</h2><p>粘贴同步码，先预览再写入</p></div></div>
         <label for="token-input">同步码</label>
-        <textarea id="token-input" class="token input" placeholder="粘贴 BM2. 开头的加密同步码，或导入同步文件"></textarea>
+        <textarea id="token-input" class="token input" placeholder="粘贴 BM2. 开头的同步码，或导入同步文件"></textarea>
         <div class="file-row">
           <label class="file-button" for="token-file">从文件导入</label>
           <input id="token-file" type="file" accept=".bookmarkbridge,.txt,text/plain" />
           <span id="file-name">未选择文件</span>
         </div>
-        <label for="receive-password">同步密码</label>
-        <input id="receive-password" class="password" type="password" autocomplete="current-password" placeholder="输入发送端设置的密码" />
-        <button id="inspect-token">解密并预览差异</button>
+        <div class="receive-password-block">
+          <label for="receive-password">同步密码（如发送端设置过）</label>
+          <input id="receive-password" class="password" type="password" autocomplete="current-password" placeholder="未加密同步码可留空" />
+          <button id="inspect-token">解密并预览差异</button>
+        </div>
         <div id="preview" class="preview hidden"></div>
         <div id="merge-options" class="hidden">
           <label for="destination-root">合并到</label>
