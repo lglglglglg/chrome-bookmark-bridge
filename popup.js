@@ -3,7 +3,7 @@ const LEGACY_TOKEN_PREFIX = "BM1.";
 const PBKDF2_ITERATIONS = 210000;
 
 const $ = (id) => document.getElementById(id);
-const state = { roots: [], incoming: null };
+const state = { roots: [], incoming: null, lastMerge: null };
 
 function setResult(id, message, error = false) {
   const el = $(id);
@@ -14,27 +14,47 @@ function setResult(id, message, error = false) {
 
 function clearResult(id) { $(id).classList.add("hidden"); }
 
+function updateProgress(visible, message = "", value = 0) {
+  $("progress-wrap").classList.toggle("hidden", !visible);
+  $("progress-label").textContent = message;
+  $("progress-bar").value = Math.max(0, Math.min(100, value));
+}
+
 function rootLabel(node) {
   return node.id === "bookmark_bar" ? "书签栏" : node.id === "other" ? "其他书签" : node.id === "mobile" ? "移动设备书签" : (node.title || node.id);
 }
 
-function fillRootSelect(select, roots) {
+function folderEntries(nodes, depth = 0, parentPath = []) {
+  const entries = [];
+  for (const node of nodes) {
+    if (node.id === "synced") continue;
+    const title = rootLabel(node);
+    const path = [...parentPath, title];
+    entries.push({ node, label: path.join(" / "), depth });
+    if (!node.url && node.children?.length) entries.push(...folderEntries(node.children, depth + 1, path));
+  }
+  return entries;
+}
+
+function fillRootSelect(select, roots, includeNested = false) {
   select.replaceChildren();
-  roots.filter((root) => root.id !== "synced").forEach((root) => {
+  const entries = includeNested ? folderEntries(roots) : roots.filter((root) => root.id !== "synced").map((node) => ({ node, label: rootLabel(node), depth: 0 }));
+  entries.forEach(({ node, label, depth }) => {
     const option = document.createElement("option");
-    option.value = root.id;
-    option.textContent = rootLabel(root);
+    option.value = node.id;
+    option.textContent = `${"　".repeat(depth)}${label}`;
     select.append(option);
   });
 }
 
 function countNodes(node) {
-  let bookmarks = 0, folders = 0;
+  let bookmarks = 0, folders = 0, items = 0;
   for (const child of node.children || []) {
+    items += 1;
     if (child.url) bookmarks += 1;
-    else { folders += 1; const nested = countNodes(child); bookmarks += nested.bookmarks; folders += nested.folders; }
+    else { folders += 1; const nested = countNodes(child); bookmarks += nested.bookmarks; folders += nested.folders; items += nested.items; }
   }
-  return { bookmarks, folders };
+  return { bookmarks, folders, items };
 }
 
 function bytesToBase64Url(bytes) {
@@ -52,6 +72,24 @@ function base64UrlToBytes(value) {
 
 function bytesToJson(bytes) { return JSON.parse(new TextDecoder().decode(bytes)); }
 
+async function transformBytes(bytes, type) {
+  if (type === "gzip" && typeof CompressionStream !== "undefined") {
+    const stream = new CompressionStream("gzip");
+    const writer = stream.writable.getWriter();
+    await writer.write(bytes);
+    await writer.close();
+    return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  }
+  if (type === "gunzip" && typeof DecompressionStream !== "undefined") {
+    const stream = new DecompressionStream("gzip");
+    const writer = stream.writable.getWriter();
+    await writer.write(bytes);
+    await writer.close();
+    return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  }
+  return bytes;
+}
+
 async function deriveKey(password, salt) {
   const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
@@ -61,9 +99,12 @@ async function encodeToken(value, password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(password, salt);
-  const plaintext = new TextEncoder().encode(JSON.stringify(value));
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext));
-  const envelope = { v: 2, kind: "chrome-bookmark-bridge", alg: "PBKDF2-AES-GCM", iterations: PBKDF2_ITERATIONS, salt: bytesToBase64Url(salt), iv: bytesToBase64Url(iv), ciphertext: bytesToBase64Url(ciphertext) };
+  const raw = new TextEncoder().encode(JSON.stringify(value));
+  const compressed = await transformBytes(raw, "gzip");
+  const compression = compressed.length < raw.length ? "gzip" : "none";
+  const input = compression === "gzip" ? compressed : raw;
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, input));
+  const envelope = { v: 2, kind: "chrome-bookmark-bridge", alg: "PBKDF2-AES-GCM", compression, iterations: PBKDF2_ITERATIONS, salt: bytesToBase64Url(salt), iv: bytesToBase64Url(iv), ciphertext: bytesToBase64Url(ciphertext) };
   return TOKEN_PREFIX + bytesToBase64Url(new TextEncoder().encode(JSON.stringify(envelope)));
 }
 
@@ -80,8 +121,9 @@ async function decodeToken(token, password) {
     const envelope = bytesToJson(base64UrlToBytes(compact.slice(TOKEN_PREFIX.length)));
     if (envelope.v !== 2 || envelope.alg !== "PBKDF2-AES-GCM" || !envelope.salt || !envelope.iv || !envelope.ciphertext) throw new Error("同步码版本不受支持或内容已损坏");
     const key = await deriveKey(password, base64UrlToBytes(envelope.salt));
-    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64UrlToBytes(envelope.iv) }, key, base64UrlToBytes(envelope.ciphertext));
-    const payload = bytesToJson(new Uint8Array(plaintext));
+    let plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64UrlToBytes(envelope.iv) }, key, base64UrlToBytes(envelope.ciphertext)));
+    if (envelope.compression === "gzip") plaintext = await transformBytes(plaintext, "gunzip");
+    const payload = bytesToJson(plaintext);
     if (payload.v !== 2 || payload.kind !== "chrome-bookmark-bridge" || !payload.root || !Array.isArray(payload.root.children)) throw new Error("同步码内容不完整");
     return payload;
   } catch (error) {
@@ -91,50 +133,84 @@ async function decodeToken(token, password) {
 }
 
 function serialiseNode(node) {
-  return {
-    title: node.title || "",
-    ...(node.url ? { url: node.url } : { children: (node.children || []).map(serialiseNode) })
-  };
+  return { title: node.title || "", ...(node.url ? { url: node.url } : { children: (node.children || []).map(serialiseNode) }) };
 }
 
 async function loadRoots() {
   state.roots = await chrome.bookmarks.getTree();
-  fillRootSelect($("source-root"), state.roots[0]?.children || []);
-  fillRootSelect($("destination-root"), state.roots[0]?.children || []);
+  const roots = state.roots[0]?.children || [];
+  const sourceValue = $("source-root").value;
+  const destinationValue = $("destination-root").value;
+  fillRootSelect($("source-root"), roots, true);
+  fillRootSelect($("destination-root"), roots, false);
+  if ([...$("source-root").options].some((option) => option.value === sourceValue)) $("source-root").value = sourceValue;
+  if ([...$("destination-root").options].some((option) => option.value === destinationValue)) $("destination-root").value = destinationValue;
 }
 
 async function createToken() {
   clearResult("send-result");
   const password = $("send-password").value;
+  const confirmation = $("send-password-confirm").value;
   if (password.length < 8) throw new Error("请先设置至少 8 位同步密码");
-  const rootId = $("source-root").value;
-  const [root] = await chrome.bookmarks.getSubTree(rootId);
+  if (password !== confirmation) throw new Error("两次输入的同步密码不一致");
+  updateProgress(true, "读取书签结构…", 10);
+  const [root] = await chrome.bookmarks.getSubTree($("source-root").value);
+  const counts = countNodes(root);
+  updateProgress(true, `正在压缩并加密 ${counts.items} 项…`, 45);
   const payload = { v: 2, kind: "chrome-bookmark-bridge", createdAt: new Date().toISOString(), root: serialiseNode(root) };
   const token = await encodeToken(payload, password);
   $("token-output").value = token;
   $("copy-token").disabled = false;
   $("download-token").disabled = false;
-  // 大型书签树可能超过扩展存储配额；复制/保存仍然可以正常使用。
   if (token.length < 2_000_000) {
     try { await chrome.storage.local.set({ lastToken: token }); } catch (_) { /* ignore quota errors */ }
   }
-  const counts = countNodes(root);
-  setResult("send-result", `已生成并加密：${counts.folders} 个文件夹、${counts.bookmarks} 个书签。密码不会写入同步码。`);
+  updateProgress(true, "加密同步码已生成", 100);
+  setResult("send-result", `已生成并加密：${counts.folders} 个文件夹、${counts.bookmarks} 个书签。压缩后同步码 ${token.length.toLocaleString()} 字符。`);
+  setTimeout(() => updateProgress(false), 1200);
+}
+
+async function calculateDiff(parentId, children, stats) {
+  const existing = await chrome.bookmarks.getChildren(parentId);
+  const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
+  const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
+  for (const child of children || []) {
+    if (child.url) {
+      const duplicate = urlSet.has(`${child.url}\u0000${child.title}`);
+      if (duplicate) stats.skipped += 1; else stats.bookmarks += 1;
+    } else {
+      const folder = folderMap.get(child.title);
+      if (folder) await calculateDiff(folder.id, child.children, stats);
+      else { const nested = countNodes(child); stats.folders += 1 + nested.folders; stats.bookmarks += nested.bookmarks; }
+    }
+  }
+}
+
+async function renderPreview() {
+  if (!state.incoming) return;
+  const destination = $("destination-root").selectedOptions[0]?.textContent || "目标位置";
+  const sourceCounts = countNodes(state.incoming.root);
+  const diff = { bookmarks: 0, folders: 0, skipped: 0 };
+  await calculateDiff($("destination-root").value, state.incoming.root.children, diff);
+  state.diff = diff;
+  $("preview").textContent = `来源：${state.incoming.root.title || "未命名"} ｜ 创建时间：${new Date(state.incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，跳过 ${diff.skipped} 个重复项`;
+  $("preview").classList.remove("hidden");
 }
 
 async function inspectToken() {
   clearResult("receive-result");
+  updateProgress(true, "解密并检查同步码…", 35);
   try {
-    const payload = await decodeToken($("token-input").value, $("receive-password").value);
-    state.incoming = payload;
-    const counts = countNodes(payload.root);
-    $("preview").textContent = `来源位置：${payload.root.title || "未命名"} ｜ 创建时间：${new Date(payload.createdAt).toLocaleString()} ｜ ${counts.folders} 个文件夹、${counts.bookmarks} 个书签`;
-    $("preview").classList.remove("hidden");
+    state.incoming = await decodeToken($("token-input").value, $("receive-password").value);
     $("merge-options").classList.remove("hidden");
+    await renderPreview();
+    updateProgress(true, "差异预览已完成", 100);
+    setTimeout(() => updateProgress(false), 800);
   } catch (error) {
     state.incoming = null;
     $("preview").classList.add("hidden");
     $("merge-options").classList.add("hidden");
+    updateProgress(false);
     setResult("receive-result", error.message || "无法解析同步码", true);
   }
 }
@@ -144,14 +220,18 @@ async function mergeChildren(parentId, children, mode, stats) {
   const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
   const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
   for (const child of children || []) {
+    stats.processed += 1;
+    updateProgress(true, `正在合并：${stats.processed}/${stats.total} 项`, 25 + (stats.processed / stats.total) * 70);
     if (child.url) {
       const key = `${child.url}\u0000${child.title}`;
       if (mode === "smart" && urlSet.has(key)) { stats.skipped += 1; continue; }
-      await chrome.bookmarks.create({ parentId, title: child.title, url: child.url });
+      const created = await chrome.bookmarks.create({ parentId, title: child.title, url: child.url });
       stats.bookmarks += 1;
+      stats.createdNodes.push({ id: created.id, type: "bookmark" });
+      urlSet.add(key);
     } else {
       let folder = mode === "smart" ? folderMap.get(child.title) : null;
-      if (!folder) { folder = await chrome.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; }
+      if (!folder) { folder = await chrome.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; stats.createdNodes.push({ id: folder.id, type: "folder" }); folderMap.set(child.title, folder); }
       await mergeChildren(folder.id, child.children, mode, stats);
     }
   }
@@ -160,19 +240,49 @@ async function mergeChildren(parentId, children, mode, stats) {
 async function mergeToken() {
   if (!state.incoming) return;
   const mode = document.querySelector('input[name="merge-mode"]:checked').value;
-  const stats = { bookmarks: 0, folders: 0, skipped: 0 };
+  const stats = { bookmarks: 0, folders: 0, skipped: 0, processed: 0, total: Math.max(1, countNodes(state.incoming.root).items), createdNodes: [] };
+  updateProgress(true, "准备合并…", 20);
   try {
     await mergeChildren($("destination-root").value, state.incoming.root.children, mode, stats);
+    state.lastMerge = { createdNodes: stats.createdNodes };
+    $("undo-merge").classList.toggle("hidden", stats.createdNodes.length === 0);
     setResult("receive-result", `合并完成：新增 ${stats.bookmarks} 个书签、${stats.folders} 个文件夹，跳过 ${stats.skipped} 个重复项。`);
+    updateProgress(true, "合并完成", 100);
     await loadRoots();
+    await renderPreview();
+    setTimeout(() => updateProgress(false), 1200);
   } catch (error) {
+    if (stats.createdNodes.length) {
+      state.lastMerge = { createdNodes: stats.createdNodes };
+      $("undo-merge").classList.remove("hidden");
+    }
+    updateProgress(false);
     setResult("receive-result", `合并失败：${error.message || error}`, true);
   }
 }
 
+async function undoMerge() {
+  if (!state.lastMerge?.createdNodes?.length) return;
+  $("undo-merge").disabled = true;
+  updateProgress(true, "正在撤销本次合并…", 50);
+  for (const node of [...state.lastMerge.createdNodes].reverse()) {
+    try {
+      if (node.type === "folder") await chrome.bookmarks.removeTree(node.id);
+      else await chrome.bookmarks.remove(node.id);
+    } catch (_) { /* already removed or moved; continue cleanup */ }
+  }
+  state.lastMerge = null;
+  $("undo-merge").classList.add("hidden");
+  $("undo-merge").disabled = false;
+  await loadRoots();
+  if (state.incoming) await renderPreview();
+  updateProgress(false);
+  setResult("receive-result", "已撤销本次合并，目标端原有书签未受影响。");
+}
+
 async function copyToken() {
   await navigator.clipboard.writeText($("token-output").value);
-  setResult("send-result", "同步码已复制到剪贴板，可以在目标环境直接粘贴。\n" + $("send-result").textContent);
+  setResult("send-result", "同步码已复制到剪贴板，可以在目标环境粘贴。\n" + $("send-result").textContent);
 }
 
 function downloadToken() {
@@ -182,11 +292,13 @@ function downloadToken() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-$("create-token").addEventListener("click", () => createToken().catch((error) => setResult("send-result", error.message || String(error), true)));
-$("inspect-token").addEventListener("click", () => inspectToken().catch((error) => setResult("receive-result", error.message || String(error), true)));
+$("create-token").addEventListener("click", () => createToken().catch((error) => { updateProgress(false); setResult("send-result", error.message || String(error), true); }));
+$("inspect-token").addEventListener("click", () => inspectToken());
 $("merge-token").addEventListener("click", () => mergeToken());
+$("undo-merge").addEventListener("click", () => undoMerge());
 $("copy-token").addEventListener("click", () => copyToken().catch((error) => setResult("send-result", error.message || String(error), true)));
 $("download-token").addEventListener("click", downloadToken);
+$("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
 $("token-file").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -194,9 +306,7 @@ $("token-file").addEventListener("change", async (event) => {
     $("token-input").value = await file.text();
     $("file-name").textContent = file.name;
     setResult("receive-result", "文件已导入，请输入同步密码后点击“预览同步内容”。");
-  } catch (error) {
-    setResult("receive-result", `文件读取失败：${error.message || error}`, true);
-  }
+  } catch (error) { setResult("receive-result", `文件读取失败：${error.message || error}`, true); }
 });
 
 (async function init() {
@@ -204,7 +314,5 @@ $("token-file").addEventListener("change", async (event) => {
     await loadRoots();
     const saved = await chrome.storage.local.get("lastToken");
     if (saved.lastToken) $("token-input").value = saved.lastToken;
-  } catch (error) {
-    setResult("send-result", `无法读取当前书签：${error.message || error}`, true);
-  }
+  } catch (error) { setResult("send-result", `无法读取当前书签：${error.message || error}`, true); }
 })();

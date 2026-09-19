@@ -14,5 +14,7 @@ button { border:1px solid #d2d7e2; border-radius:8px; background:#fff; color:#27
 .button-row { display:flex; gap:8px; margin-top:8px; } .button-row button { flex:1; }
 .file-row { display:flex; align-items:center; gap:8px; margin-top:8px; color:#7b8494; font-size:11px; } .file-row input[type=file] { display:none; } .file-button { display:inline-block; margin:0; padding:7px 9px; border:1px solid #d2d7e2; border-radius:8px; color:#273248; background:#fff; cursor:pointer; font-size:12px; } .file-button:hover { background:#f1f3f8; }
 .result { border-radius:8px; padding:9px 10px; margin-top:10px; font-size:12px; line-height:1.45; background:#f0fdf4; color:#166534; } .result.error { background:#fff1f2; color:#9f1239; } .preview { padding:10px; border-radius:8px; background:#f7f8fc; font-size:12px; line-height:1.7; margin-top:9px; }
+.undo { width:100%; margin-top:8px; color:#9f1239; border-color:#fecdd3; } .undo:hover:not(:disabled) { background:#fff1f2; }
+.progress-wrap { padding:8px 10px; border-radius:10px; background:#fff; box-shadow:0 2px 8px #1d2c5410; color:#596273; font-size:11px; margin:0 0 12px; } progress { display:block; width:100%; height:7px; margin-top:6px; accent-color:#5d65df; }
 fieldset { border:0; padding:0; margin:12px 0 0; } .radio { color:#374151; display:block; margin:7px 0; } .radio input { margin-right:6px; }
 .hidden { display:none; } footer { text-align:center; color:#9aa2b1; font-size:10px; padding:2px 0 5px; }
