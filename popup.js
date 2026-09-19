@@ -5,7 +5,7 @@ const PBKDF2_ITERATIONS = 210000;
 const extensionApi = globalThis.chrome ?? globalThis.browser;
 
 const $ = (id) => document.getElementById(id);
-const state = { roots: [], incoming: null, lastMerge: null };
+const state = { roots: [], incoming: null, lastMerge: null, sendSummary: "" };
 
 function setResult(id, message, error = false) {
   const el = $(id);
@@ -173,7 +173,8 @@ async function createToken() {
   $("download-token").disabled = false;
   updateProgress(true, password ? "加密同步码已生成" : "同步码已生成", 100);
   const securityText = password ? "已加密" : "未加密";
-  setResult("send-result", `已生成${securityText}同步码：${counts.folders} 个文件夹、${counts.bookmarks} 个书签。同步码 ${token.length.toLocaleString()} 字符。${password ? "" : "建议设置密码后再跨设备传递。"}`);
+  state.sendSummary = `已生成${securityText}同步码：${counts.folders} 个文件夹、${counts.bookmarks} 个书签。同步码 ${token.length.toLocaleString()} 字符。${password ? "" : "建议设置密码后再跨设备传递。"}`;
+  setResult("send-result", state.sendSummary);
   setTimeout(() => updateProgress(false), 1200);
 }
 
@@ -289,7 +290,7 @@ async function undoMerge() {
 
 async function copyToken() {
   await navigator.clipboard.writeText($("token-output").value);
-  setResult("send-result", "同步码已复制到剪贴板，可以在目标环境粘贴。\n" + $("send-result").textContent);
+  setResult("send-result", "同步码已复制到剪贴板，可以在目标环境粘贴。" + (state.sendSummary ? `\n${state.sendSummary}` : ""));
 }
 
 async function runBusy(buttonId, task) {
@@ -308,7 +309,7 @@ function downloadToken() {
 $("create-token").addEventListener("click", () => runBusy("create-token", createToken).catch((error) => { updateProgress(false); setResult("send-result", error.message || String(error), true); }));
 $("inspect-token").addEventListener("click", () => runBusy("inspect-token", inspectToken));
 $("merge-token").addEventListener("click", () => runBusy("merge-token", mergeToken));
-$("undo-merge").addEventListener("click", () => runBusy("undo-merge", undoMerge));
+$("undo-merge").addEventListener("click", () => runBusy("undo-merge", undoMerge).catch((error) => setResult("receive-result", error.message || String(error), true)));
 $("copy-token").addEventListener("click", () => copyToken().catch((error) => setResult("send-result", error.message || String(error), true)));
 $("download-token").addEventListener("click", downloadToken);
 $("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
