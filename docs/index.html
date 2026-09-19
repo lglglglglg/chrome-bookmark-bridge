@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>书签桥隐私政策</title>
+    <style>
+      :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17213a; background: #f5f7ff; }
+      body { max-width: 760px; margin: 0 auto; padding: 48px 24px 72px; line-height: 1.75; }
+      main { background: #fff; border: 1px solid #e1e6f5; border-radius: 20px; padding: 36px; box-shadow: 0 12px 32px rgba(45, 68, 138, .08); }
+      h1 { margin-top: 0; font-size: 2rem; } h2 { margin-top: 2rem; font-size: 1.2rem; }
+      .date { color: #65708a; } a { color: #4655ca; } code { background: #f1f3fb; padding: .12em .35em; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>书签桥隐私政策</h1>
+      <p class="date">生效日期：2026-09-19</p>
+      <p>书签桥（以下简称“本扩展”）尊重你的隐私。本政策说明本扩展如何处理信息。</p>
+      <h2>我们处理什么信息</h2>
+      <p>本扩展只在你主动点击相关按钮时读取当前浏览器配置文件中的书签，用于生成书签快照、预览和合并。书签内容可能包含网址、标题和文件夹名称。</p>
+      <p>本扩展不会读取或处理 Gmail、Google 账号凭据、密码、浏览历史、网页内容或其他浏览器配置文件的数据。</p>
+      <h2>数据是否上传</h2>
+      <p>不会。本扩展没有远程服务器、分析服务、广告 SDK 或账号系统。书签快照只在本地生成；如果你设置密码，会通过 Web Crypto AES-GCM 加密。同步码由你自行复制、粘贴或保存为文件，本扩展不会接收或上传它。</p>
+      <p>本扩展不会自动保存或恢复同步码。关闭扩展界面后，接收区会保持空白，避免误操作旧数据。</p>
+      <h2>权限用途</h2>
+      <ul>
+        <li><code>bookmarks</code>：读取和创建你明确选择的书签。</li>
+        <li><code>clipboardWrite</code>：在你点击“复制同步码”时写入剪贴板。</li>
+        <li><code>sidePanel</code>：仅在你点击“在侧边栏选择文件”时打开扩展自己的侧边栏，用于选择本地同步文件；不会读取网页内容。</li>
+      </ul>
+      <p>本扩展不申请读取剪贴板、网络访问、标签页、历史记录或身份信息权限。</p>
+      <h2>数据保留与删除</h2>
+      <p>本扩展不会在开发者服务器保留任何数据。你可以删除同步文件、清空剪贴板或在 <code>chrome://extensions</code> 中清除本扩展数据。</p>
+      <h2>安全提示</h2>
+      <p>请通过可信渠道传递同步码，不要把同步码和密码一起发送给不可信对象。忘记密码后，开发者无法恢复加密内容。</p>
+      <h2>政策变更与联系方式</h2>
+      <p>如果本扩展未来改变数据处理方式，我们会更新本政策的生效日期和内容。如有问题或建议，请在 <a href="https://github.com/lglglglglg/chrome-bookmark-bridge/issues">GitHub Issues</a> 提交；请勿在 Issue 中粘贴真实书签、同步码或密码。</p>
+    </main>
+  </body>
+</html>

@@ -1,9 +1,10 @@
 # 书签桥
 
-## 建议 GitHub 仓库
+## 开源项目
 
-- 仓库名：`chrome-bookmark-bridge`
-- 简介：`A privacy-first Chrome extension for encrypted bookmark transfer and merging between Chrome profiles.`
+- GitHub：<https://github.com/lglglglglg/chrome-bookmark-bridge>
+- 许可证：[MIT License](LICENSE)
+- 问题反馈：[GitHub Issues](https://github.com/lglglglglg/chrome-bookmark-bridge/issues)
 
 Manifest V3 Chrome 扩展，用“端到端加密同步码”把当前 Chrome 配置文件的一组书签传到另一个配置文件，再预览和合并。
 
@@ -49,7 +50,11 @@ Chrome 扩展能读取的是当前 Chrome 配置文件的书签，而不是某�
 
 ## 发布资料
 
-Chrome Web Store 的商店文案、截图清单和隐私政策见 `STORE_LISTING.md` 与 `PRIVACY_POLICY.md`；Edge 发布资料见 `EDGE_STORE_LISTING.md`。
+Chrome Web Store 的商店文案、截图清单和隐私政策见 `STORE_LISTING.md` 与 `PRIVACY_POLICY.md`；Edge 发布资料见 `EDGE_STORE_LISTING.md`。公开隐私政策页面部署后位于 `https://lglglglglg.github.io/chrome-bookmark-bridge/`。
+
+## 参与贡献
+
+欢迎提交 Issue 和 Pull Request。提交前请阅读 [贡献指南](CONTRIBUTING.md)，并确保示例、截图和日志中不含真实书签、同步码或密码。
 
 ## 下一步
 

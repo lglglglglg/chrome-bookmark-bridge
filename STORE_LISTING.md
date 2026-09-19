@@ -6,8 +6,8 @@
 - 建议分类：生产力工具（Productivity）
 - 版本：0.4.6
 - 商店语言：简体中文
-- 官网/项目主页：发布 GitHub 仓库后填写仓库地址
-- 隐私政策 URL：将 `PRIVACY_POLICY.md` 发布为公开网页后填写
+- 官网/项目主页：`https://github.com/lglglglglg/chrome-bookmark-bridge`
+- 隐私政策 URL：`https://lglglglglg.github.io/chrome-bookmark-bridge/`
 
 ## 简短描述（132 字符以内）
 
@@ -34,7 +34,7 @@
 - 支持逐条同步差异预览、多次合并历史和分别撤销任意一次合并。
 - 大书签树支持进度提示与取消操作；同步码过长时建议使用文件导入。
 - 对大书签树进行压缩，并显示处理进度。
-- 只申请书签和剪贴板写入权限。
+- 只申请书签、剪贴板写入和用户主动打开的扩展侧边栏权限。
 
 重要说明：Chrome 扩展读取的是当前 Chrome 配置文件的书签，而不是某个 Google 账号云端书签。多个 Google 账号登录在同一配置文件时，它们共用该配置文件的书签集合。
 
@@ -54,7 +54,7 @@
 
 - [ ] 上传 `icon-128.png` 作为商店图标。
 - [ ] 准备 5 张截图，尺寸符合当前 Chrome Web Store 要求。
-- [ ] 填写隐私政策公开 URL。
-- [ ] 在权限说明中解释 `bookmarks`、`clipboardWrite` 的用途。
+- [ ] 确认 GitHub Pages 隐私政策 URL 已可公开访问。
+- [ ] 在权限说明中解释 `bookmarks`、`clipboardWrite`、`sidePanel` 的用途。
 - [ ] 上传打包后的扩展 ZIP（不要包含 `assets/icon-source.png` 等源素材也可以，保留图标 PNG 即可）。
 - [ ] 用全新 Chrome 配置文件安装 ZIP，完成一次发送、文件导入、错误密码和合并测试。
