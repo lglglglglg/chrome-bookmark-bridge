@@ -51,6 +51,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .link-button:hover:not(:disabled) { background: transparent; color: #3f49af; text-decoration: underline; }
 .button-row .recommended { border-color: #5d65df; color: #39458b; background: var(--soft-blue); box-shadow: 0 0 0 2px #dbe3ff; }
 .file-row { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: #7b8494; font-size: 11px; min-width: 0; }
+.drop-zone { margin-top: 10px; padding: 12px; border: 1px dashed #cbd2e1; border-radius: 12px; background: #fbfcff; transition: border-color .15s, background .15s, box-shadow .15s; }
+.drop-zone:focus { outline: none; border-color: #7b82e9; box-shadow: 0 0 0 3px #e0e3ff; }
+.drop-zone.dragover { border-color: #5d65df; background: #eef2ff; box-shadow: 0 0 0 3px #dbe3ff; }
+.drop-title { color: #39458b; font-size: 12px; font-weight: 700; }
+.drop-subtitle { color: #8b93a3; font-size: 10px; margin-top: 3px; }
 .file-row input[type=file] { display: none; }
 .file-button { display: inline-block; flex: 0 0 auto; margin: 0; padding: 8px 10px; border: 1px solid #d2d7e2; border-radius: 10px; color: #273248; background: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
 .file-button:hover { background: #f1f3f8; }

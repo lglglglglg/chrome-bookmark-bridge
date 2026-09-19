@@ -446,15 +446,27 @@ $("source-filter").addEventListener("input", applySourceFilter);
 $("toggle-source-tree").addEventListener("click", () => { state.sourceExpanded = !state.sourceExpanded; applySourceFilter(); });
 $("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
 $("cancel-operation").addEventListener("click", () => { if (state.operation) state.operation.abort(); });
-$("token-file").addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
+async function importTokenFile(file) {
   if (!file) return;
   try {
     $("token-input").value = await file.text();
     $("file-name").textContent = file.name;
     setResult("receive-result", "文件已导入，请输入同步密码后点击“预览同步内容”。");
   } catch (error) { setResult("receive-result", `文件读取失败：${error.message || error}`, true); }
+}
+
+$("token-file").addEventListener("change", (event) => importTokenFile(event.target.files?.[0]));
+$("drop-zone").addEventListener("dragenter", (event) => { event.preventDefault(); $("drop-zone").classList.add("dragover"); });
+$("drop-zone").addEventListener("dragover", (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; $("drop-zone").classList.add("dragover"); });
+$("drop-zone").addEventListener("dragleave", (event) => { if (!event.currentTarget.contains(event.relatedTarget)) $("drop-zone").classList.remove("dragover"); });
+$("drop-zone").addEventListener("drop", (event) => {
+  event.preventDefault();
+  $("drop-zone").classList.remove("dragover");
+  const file = [...(event.dataTransfer.files || [])].find((item) => /\.bookmarkbridge$|\.txt$/i.test(item.name) || item.type === "text/plain");
+  if (file) importTokenFile(file);
+  else setResult("receive-result", "请拖入 .bookmarkbridge 或 .txt 同步文件。", true);
 });
+$("drop-zone").addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") $("token-file").click(); });
 
 (async function init() {
   try {
