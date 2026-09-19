@@ -1,11 +1,15 @@
 {
   "manifest_version": 3,
   "name": "书签桥",
-  "description": "用自包含同步码在不同 Chrome 配置文件之间安全地传递和合并书签。",
+  "description": "用加密同步码在不同 Chrome 配置文件之间安全地传递和合并书签。",
   "version": "0.2.0",
   "action": {
     "default_title": "书签桥",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon-16.png",
+      "32": "icon-32.png"
+    }
   },
   "icons": {
     "16": "icon-16.png",
