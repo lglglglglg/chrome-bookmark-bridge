@@ -1,6 +1,8 @@
 const TOKEN_PREFIX = "BM2.";
 const LEGACY_TOKEN_PREFIX = "BM1.";
 const PBKDF2_ITERATIONS = 210000;
+// Chromium 浏览器（Chrome、Edge）都提供 chrome 命名空间；保留 browser 兜底便于未来扩展。
+const extensionApi = globalThis.chrome ?? globalThis.browser;
 
 const $ = (id) => document.getElementById(id);
 const state = { roots: [], incoming: null, lastMerge: null };
@@ -137,7 +139,7 @@ function serialiseNode(node) {
 }
 
 async function loadRoots() {
-  state.roots = await chrome.bookmarks.getTree();
+  state.roots = await extensionApi.bookmarks.getTree();
   const roots = state.roots[0]?.children || [];
   const sourceValue = $("source-root").value;
   const destinationValue = $("destination-root").value;
@@ -154,7 +156,7 @@ async function createToken() {
   if (password.length < 8) throw new Error("请先设置至少 8 位同步密码");
   if (password !== confirmation) throw new Error("两次输入的同步密码不一致");
   updateProgress(true, "读取书签结构…", 10);
-  const [root] = await chrome.bookmarks.getSubTree($("source-root").value);
+  const [root] = await extensionApi.bookmarks.getSubTree($("source-root").value);
   const counts = countNodes(root);
   updateProgress(true, `正在压缩并加密 ${counts.items} 项…`, 45);
   const payload = { v: 2, kind: "chrome-bookmark-bridge", createdAt: new Date().toISOString(), root: serialiseNode(root) };
@@ -163,7 +165,7 @@ async function createToken() {
   $("copy-token").disabled = false;
   $("download-token").disabled = false;
   if (token.length < 2_000_000) {
-    try { await chrome.storage.local.set({ lastToken: token }); } catch (_) { /* ignore quota errors */ }
+    try { await extensionApi.storage.local.set({ lastToken: token }); } catch (_) { /* ignore quota errors */ }
   }
   updateProgress(true, "加密同步码已生成", 100);
   setResult("send-result", `已生成并加密：${counts.folders} 个文件夹、${counts.bookmarks} 个书签。压缩后同步码 ${token.length.toLocaleString()} 字符。`);
@@ -171,7 +173,7 @@ async function createToken() {
 }
 
 async function calculateDiff(parentId, children, stats) {
-  const existing = await chrome.bookmarks.getChildren(parentId);
+  const existing = await extensionApi.bookmarks.getChildren(parentId);
   const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
   const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
   for (const child of children || []) {
@@ -216,7 +218,7 @@ async function inspectToken() {
 }
 
 async function mergeChildren(parentId, children, mode, stats) {
-  const existing = mode === "smart" ? await chrome.bookmarks.getChildren(parentId) : [];
+  const existing = mode === "smart" ? await extensionApi.bookmarks.getChildren(parentId) : [];
   const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
   const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
   for (const child of children || []) {
@@ -225,13 +227,13 @@ async function mergeChildren(parentId, children, mode, stats) {
     if (child.url) {
       const key = `${child.url}\u0000${child.title}`;
       if (mode === "smart" && urlSet.has(key)) { stats.skipped += 1; continue; }
-      const created = await chrome.bookmarks.create({ parentId, title: child.title, url: child.url });
+      const created = await extensionApi.bookmarks.create({ parentId, title: child.title, url: child.url });
       stats.bookmarks += 1;
       stats.createdNodes.push({ id: created.id, type: "bookmark" });
       urlSet.add(key);
     } else {
       let folder = mode === "smart" ? folderMap.get(child.title) : null;
-      if (!folder) { folder = await chrome.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; stats.createdNodes.push({ id: folder.id, type: "folder" }); folderMap.set(child.title, folder); }
+      if (!folder) { folder = await extensionApi.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; stats.createdNodes.push({ id: folder.id, type: "folder" }); folderMap.set(child.title, folder); }
       await mergeChildren(folder.id, child.children, mode, stats);
     }
   }
@@ -267,8 +269,8 @@ async function undoMerge() {
   updateProgress(true, "正在撤销本次合并…", 50);
   for (const node of [...state.lastMerge.createdNodes].reverse()) {
     try {
-      if (node.type === "folder") await chrome.bookmarks.removeTree(node.id);
-      else await chrome.bookmarks.remove(node.id);
+      if (node.type === "folder") await extensionApi.bookmarks.removeTree(node.id);
+      else await extensionApi.bookmarks.remove(node.id);
     } catch (_) { /* already removed or moved; continue cleanup */ }
   }
   state.lastMerge = null;
@@ -285,6 +287,12 @@ async function copyToken() {
   setResult("send-result", "同步码已复制到剪贴板，可以在目标环境粘贴。\n" + $("send-result").textContent);
 }
 
+async function runBusy(buttonId, task) {
+  const button = $(buttonId);
+  button.disabled = true;
+  try { await task(); } finally { button.disabled = false; }
+}
+
 function downloadToken() {
   const blob = new Blob([$("token-output").value], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -292,10 +300,10 @@ function downloadToken() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-$("create-token").addEventListener("click", () => createToken().catch((error) => { updateProgress(false); setResult("send-result", error.message || String(error), true); }));
-$("inspect-token").addEventListener("click", () => inspectToken());
-$("merge-token").addEventListener("click", () => mergeToken());
-$("undo-merge").addEventListener("click", () => undoMerge());
+$("create-token").addEventListener("click", () => runBusy("create-token", createToken).catch((error) => { updateProgress(false); setResult("send-result", error.message || String(error), true); }));
+$("inspect-token").addEventListener("click", () => runBusy("inspect-token", inspectToken));
+$("merge-token").addEventListener("click", () => runBusy("merge-token", mergeToken));
+$("undo-merge").addEventListener("click", () => runBusy("undo-merge", undoMerge));
 $("copy-token").addEventListener("click", () => copyToken().catch((error) => setResult("send-result", error.message || String(error), true)));
 $("download-token").addEventListener("click", downloadToken);
 $("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
@@ -312,7 +320,7 @@ $("token-file").addEventListener("change", async (event) => {
 (async function init() {
   try {
     await loadRoots();
-    const saved = await chrome.storage.local.get("lastToken");
+    const saved = await extensionApi.storage.local.get("lastToken");
     if (saved.lastToken) $("token-input").value = saved.lastToken;
   } catch (error) { setResult("send-result", `无法读取当前书签：${error.message || error}`, true); }
 })();

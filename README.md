@@ -9,6 +9,13 @@ Manifest V3 Chrome 扩展，用“端到端加密同步码”把当前 Chrome �
 
 当前版本：`v0.3.0`
 
+## 浏览器支持
+
+- Chrome：主版本，完整支持。
+- Microsoft Edge：Chromium 兼容版，使用同一套运行时代码和单独发布包。
+- Firefox：暂未发布，后续通过 `browser`/`chrome` API 适配。
+- Safari：暂未发布，需要 Safari Web Extension 容器和 Apple 平台签名。
+
 ## 为什么不需要切换 Google 账号
 
 Chrome 扩展能读取的是当前 Chrome 配置文件的书签，而不是某个 Google 账号云端的书签 API。同步码把书签快照编码在本地文本里，因此接收端只要能打开扩展并粘贴同步码即可；Google 账号是否登录、登录了几个账号，都不会改变这条流程。
@@ -35,7 +42,7 @@ Chrome 扩展能读取的是当前 Chrome 配置文件的书签，而不是某�
 
 ## 发布资料
 
-Chrome Web Store 的商店文案、截图清单和隐私政策见 `STORE_LISTING.md` 与 `PRIVACY_POLICY.md`。
+Chrome Web Store 的商店文案、截图清单和隐私政策见 `STORE_LISTING.md` 与 `PRIVACY_POLICY.md`；Edge 发布资料见 `EDGE_STORE_LISTING.md`。
 
 ## 下一步
 
