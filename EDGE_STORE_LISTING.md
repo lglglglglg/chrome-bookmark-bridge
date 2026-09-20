@@ -4,8 +4,8 @@
 
 - 产品名：书签桥 · 加密书签同步
 - 建议分类：生产力工具
-- 版本：0.4.6
-- 发布包：`dist/书签桥-edge-v0.4.6.zip`
+- 版本：0.4.7
+- 发布包：`dist/书签桥-edge-v0.4.7.zip`
 - 项目主页：`https://github.com/lglglglglg/chrome-bookmark-bridge`
 - 隐私政策：`https://lglglglglg.github.io/chrome-bookmark-bridge/`
 

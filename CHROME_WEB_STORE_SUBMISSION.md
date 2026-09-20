@@ -4,7 +4,7 @@
 
 ## 要上传的文件
 
-- 扩展包：`dist/书签桥-v0.4.6.zip`
+- 扩展包：`dist/书签桥-v0.4.7.zip`
 - 商店图标：`icon-128.png`
 - 隐私政策：`https://lglglglglg.github.io/chrome-bookmark-bridge/`
 - 商店文字：复制 `STORE_LISTING.md` 中的产品名、短描述和详细描述。

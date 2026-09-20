@@ -1,11 +1,14 @@
 const TOKEN_PREFIX = "BM2.";
 const LEGACY_TOKEN_PREFIX = "BM1.";
 const PBKDF2_ITERATIONS = 210000;
+// 限制来自剪贴板或文件的输入，避免损坏或恶意同步码耗尽扩展内存。
+const MAX_TOKEN_CHARS = 10 * 1024 * 1024;
+const MAX_DECOMPRESSED_BYTES = 25 * 1024 * 1024;
 // Chromium 浏览器（Chrome、Edge）都提供 chrome 命名空间；保留 browser 兜底便于未来扩展。
 const extensionApi = globalThis.chrome ?? globalThis.browser;
 
 const $ = (id) => document.getElementById(id);
-const state = { roots: [], incoming: null, sendSummary: "", mergeHistory: [], operation: null, progressTimer: null, sourceExpanded: false };
+const state = { roots: [], incoming: null, sendSummary: "", mergeHistory: [], operation: null, progressTimer: null, sourceExpanded: false, lockedControls: [] };
 const IMPORT_DB_NAME = "bookmarkBridgeImport";
 const IMPORT_STORE_NAME = "pending";
 const IMPORT_MAX_AGE = 10 * 60 * 1000;
@@ -50,6 +53,15 @@ function setResult(id, message, error = false) {
 }
 
 function clearResult(id) { $(id).classList.add("hidden"); }
+
+function invalidateIncomingPreview() {
+  if (!state.incoming) return;
+  state.incoming = null;
+  state.diff = null;
+  $("preview").classList.add("hidden");
+  $("merge-options").classList.add("hidden");
+  setResult("receive-result", "同步码已修改，请重新解密并预览差异后再合并。");
+}
 
 function updateProgress(visible, message = "", value = 0) {
   if (state.progressTimer) { clearTimeout(state.progressTimer); state.progressTimer = null; }
@@ -146,7 +158,10 @@ function countNodes(node) {
 
 function bytesToBase64Url(bytes) {
   let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
+  // 分块转换比逐字节拼接更适合较大的书签树，避免生成同步码时出现明显卡顿。
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -159,6 +174,28 @@ function base64UrlToBytes(value) {
 
 function bytesToJson(bytes) { return JSON.parse(new TextDecoder().decode(bytes)); }
 
+async function readStreamBytes(stream, maxBytes = Infinity) {
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      const error = new Error("同步码解压后的内容过大，已停止处理");
+      error.code = "PAYLOAD_TOO_LARGE";
+      throw error;
+    }
+    chunks.push(value);
+  }
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { output.set(chunk, offset); offset += chunk.byteLength; }
+  return output;
+}
+
 async function transformBytes(bytes, type) {
   if (type === "gzip" && typeof CompressionStream !== "undefined") {
     const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
@@ -166,7 +203,7 @@ async function transformBytes(bytes, type) {
   }
   if (type === "gunzip" && typeof DecompressionStream !== "undefined") {
     const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+    return readStreamBytes(stream, MAX_DECOMPRESSED_BYTES);
   }
   return bytes;
 }
@@ -196,6 +233,8 @@ async function encodeToken(value, password) {
 
 async function decodeToken(token, password) {
   const compact = token.trim().replace(/\s+/g, "");
+  if (!compact) throw new Error("请粘贴同步码，或导入同步文件");
+  if (compact.length > MAX_TOKEN_CHARS) throw new Error("同步码过大，最多支持 10 MB；请确认文件内容是否正确");
   if (compact.startsWith(LEGACY_TOKEN_PREFIX)) {
     const payload = bytesToJson(base64UrlToBytes(compact.slice(LEGACY_TOKEN_PREFIX.length)));
     if (payload.v !== 1 || payload.kind !== "chrome-bookmark-bridge" || !payload.root || !Array.isArray(payload.root.children)) throw new Error("同步码版本不受支持或内容已损坏");
@@ -204,7 +243,7 @@ async function decodeToken(token, password) {
   if (!compact.startsWith(TOKEN_PREFIX)) throw new Error("同步码格式不正确，应以 BM2. 开头");
   try {
     const envelope = bytesToJson(base64UrlToBytes(compact.slice(TOKEN_PREFIX.length)));
-    if (envelope.v !== 2) throw new Error("同步码版本不受支持或内容已损坏");
+    if (envelope.v !== 2 || envelope.kind !== "chrome-bookmark-bridge" || !["none", "gzip"].includes(envelope.compression || "none")) throw new Error("同步码版本不受支持或内容已损坏");
     const compression = envelope.compression || "none";
     let plaintext;
     if (envelope.encrypted === false) {
@@ -216,12 +255,15 @@ async function decodeToken(token, password) {
       const key = await deriveKey(password, base64UrlToBytes(envelope.salt));
       plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64UrlToBytes(envelope.iv) }, key, base64UrlToBytes(envelope.ciphertext)));
     }
-    if (compression === "gzip") plaintext = await transformBytes(plaintext, "gunzip");
+    if (compression === "gzip") {
+      if (typeof DecompressionStream === "undefined") throw new Error("当前浏览器不支持解压此同步码，请更新浏览器后重试");
+      plaintext = await transformBytes(plaintext, "gunzip");
+    }
     const payload = bytesToJson(plaintext);
     if (payload.v !== 2 || payload.kind !== "chrome-bookmark-bridge" || !payload.root || !Array.isArray(payload.root.children)) throw new Error("同步码内容不完整");
     return payload;
   } catch (error) {
-    if (error.message === "同步码版本不受支持或内容已损坏" || error.message === "同步码内容不完整" || error.message === "请输入至少 8 位同步密码") throw error;
+    if (error.code === "PAYLOAD_TOO_LARGE" || error.message === "同步码版本不受支持或内容已损坏" || error.message === "同步码内容不完整" || error.message === "请输入至少 8 位同步密码" || error.message === "当前浏览器不支持解压此同步码，请更新浏览器后重试") throw error;
     throw new Error("密码错误，或同步码已损坏");
   }
 }
@@ -312,16 +354,19 @@ async function calculateDiff(parentId, children, stats, parentPath, signal) {
 }
 
 async function renderPreview(signal) {
-  if (!state.incoming) return;
+  const incoming = state.incoming;
+  if (!incoming) return;
   const destination = $("destination-root").selectedOptions[0]?.textContent || "目标位置";
-  const sourceCounts = countNodes(state.incoming.root);
+  const sourceCounts = countNodes(incoming.root);
   const diff = { bookmarks: 0, folders: 0, skipped: 0, reusedFolders: 0, total: 0, entries: [] };
-  await calculateDiff($("destination-root").value, state.incoming.root.children, diff, state.incoming.root.title || "来源", signal);
+  await calculateDiff($("destination-root").value, incoming.root.children, diff, incoming.root.title || "来源", signal);
+  // 预览期间同步码可能被导入或手动修改；此时不渲染已经过期的计算结果。
+  if (state.incoming !== incoming) return;
   state.diff = diff;
   const preview = $("preview");
   preview.replaceChildren();
   const summary = document.createElement("div");
-  summary.textContent = `来源：${state.incoming.root.title || "未命名"} ｜ 创建时间：${new Date(state.incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，复用 ${diff.reusedFolders} 个文件夹，跳过 ${diff.skipped} 个重复项`;
+  summary.textContent = `来源：${incoming.root.title || "未命名"} ｜ 创建时间：${new Date(incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，复用 ${diff.reusedFolders} 个文件夹，跳过 ${diff.skipped} 个重复项`;
   preview.append(summary);
   const list = document.createElement("ul");
   list.className = "diff-list";
@@ -402,7 +447,7 @@ function renderMergeHistory() {
     const row = document.createElement("div");
     row.className = "history-row";
     const text = document.createElement("span");
-    text.textContent = `${record.createdAt.toLocaleTimeString()} · 新增 ${record.bookmarks} 个书签、${record.folders} 个文件夹${record.partial ? "（已取消）" : ""}`;
+    text.textContent = `${record.createdAt.toLocaleTimeString()} · 新增 ${record.bookmarks} 个书签、${record.folders} 个文件夹${record.partial ? "（已取消）" : ""}${record.undoPending ? `（${record.createdNodes.length} 项未安全撤销）` : ""}`;
     const button = document.createElement("button");
     button.textContent = "撤销";
     button.addEventListener("click", () => runBusy(button, (signal) => undoMerge(index, signal)).catch((error) => {
@@ -438,19 +483,34 @@ async function undoMerge(index, signal) {
   const record = state.mergeHistory[index];
   if (!record?.createdNodes?.length) return;
   updateProgress(true, "正在撤销本次合并…", 50);
-  for (const node of [...record.createdNodes].reverse()) {
-    assertActive(signal);
+  const nodes = [...record.createdNodes].reverse();
+  const remaining = [];
+  for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
+    const node = nodes[nodeIndex];
     try {
-      if (node.type === "folder") await extensionApi.bookmarks.removeTree(node.id);
-      else await extensionApi.bookmarks.remove(node.id);
-    } catch (_) { /* already removed or moved; continue cleanup */ }
+      assertActive(signal);
+      // 不使用 removeTree：若用户在合并后手动向该文件夹新增内容，递归删除会误伤用户数据。
+      await extensionApi.bookmarks.remove(node.id);
+    } catch (error) {
+      if (error.code === "ABORTED") {
+        remaining.push(...nodes.slice(nodeIndex));
+        record.createdNodes = remaining.reverse();
+        record.undoPending = true;
+        renderMergeHistory();
+        throw error;
+      }
+      // 书签被移动、已删除或文件夹仍有用户后来添加的内容时保留该项，供用户稍后再次撤销。
+      remaining.push(node);
+    }
   }
-  state.mergeHistory.splice(index, 1);
+  record.createdNodes = remaining.reverse();
+  record.undoPending = record.createdNodes.length > 0;
+  if (!record.createdNodes.length) state.mergeHistory.splice(index, 1);
   renderMergeHistory();
   await loadRoots();
   if (state.incoming) await renderPreview(signal);
   updateProgress(false);
-  setResult("receive-result", "已撤销本次合并，目标端原有书签未受影响。");
+  setResult("receive-result", record.undoPending ? `已撤销可安全删除的内容；仍有 ${record.createdNodes.length} 项未撤销，可能已被移动或包含后来新增的内容。` : "已撤销本次合并，目标端原有书签未受影响。", record.undoPending);
 }
 
 async function copyToken() {
@@ -458,11 +518,23 @@ async function copyToken() {
   setResult("send-result", "同步码已复制到剪贴板，可以在目标环境粘贴。" + (state.sendSummary ? `\n${state.sendSummary}` : ""));
 }
 
+function setOperationControlsLocked(locked) {
+  if (locked) {
+    const controls = document.querySelectorAll("#source-filter, #source-root, #toggle-source-tree, #send-password, #send-password-confirm, #create-token, #token-input, #open-file-import, #receive-password, #inspect-token, #destination-root, input[name='merge-mode'], #merge-token, #merge-history button");
+    state.lockedControls = [...controls].map((control) => ({ control, disabled: control.disabled }));
+    state.lockedControls.forEach(({ control }) => { control.disabled = true; });
+    return;
+  }
+  state.lockedControls.forEach(({ control, disabled }) => { control.disabled = disabled; });
+  state.lockedControls = [];
+}
+
 async function runBusy(buttonId, task) {
+  if (state.operation) throw new Error("当前已有操作正在进行，请等待完成或点击取消");
   const button = typeof buttonId === "string" ? $(buttonId) : buttonId;
-  button.disabled = true;
   const signal = beginOperation();
-  try { await task(signal); } finally { endOperation(); button.disabled = false; }
+  setOperationControlsLocked(true);
+  try { await task(signal); } finally { endOperation(); setOperationControlsLocked(false); }
 }
 
 function downloadToken() {
@@ -479,11 +551,19 @@ $("copy-token").addEventListener("click", () => copyToken().catch((error) => set
 $("download-token").addEventListener("click", downloadToken);
 $("source-filter").addEventListener("input", applySourceFilter);
 $("toggle-source-tree").addEventListener("click", () => { state.sourceExpanded = !state.sourceExpanded; applySourceFilter(); });
-$("destination-root").addEventListener("change", () => renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true)));
+$("token-input").addEventListener("input", invalidateIncomingPreview);
+$("destination-root").addEventListener("change", () => {
+  if (state.operation) return;
+  renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true));
+});
 $("cancel-operation").addEventListener("click", () => { if (state.operation) state.operation.abort(); });
 async function importTokenFile(file) {
   if (!file) return;
   try {
+    if (file.size > MAX_TOKEN_CHARS) throw new Error("同步文件过大，最多支持 10 MB；请确认选择了正确文件");
+    state.incoming = null;
+    $("preview").classList.add("hidden");
+    $("merge-options").classList.add("hidden");
     $("token-input").value = await file.text();
     $("file-name").textContent = file.name;
     setResult("receive-result", "文件已导入，请输入同步密码后点击“预览同步内容”。");

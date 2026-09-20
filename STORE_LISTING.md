@@ -4,7 +4,7 @@
 
 - 产品名：书签桥 · 加密书签同步
 - 建议分类：生产力工具（Productivity）
-- 版本：0.4.6
+- 版本：0.4.7
 - 商店语言：简体中文
 - 官网/项目主页：`https://github.com/lglglglglg/chrome-bookmark-bridge`
 - 隐私政策 URL：`https://lglglglglg.github.io/chrome-bookmark-bridge/`

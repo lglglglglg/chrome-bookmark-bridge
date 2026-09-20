@@ -1,5 +1,6 @@
 const DB_NAME = "bookmarkBridgeImport";
 const STORE_NAME = "pending";
+const MAX_TOKEN_BYTES = 10 * 1024 * 1024;
 
 const $ = (id) => document.getElementById(id);
 
@@ -17,6 +18,7 @@ async function savePendingImport(file) {
   if (!/\.bookmarkbridge$|\.txt$/i.test(file.name) && file.type !== "text/plain") {
     throw new Error("请选择 .bookmarkbridge 或 .txt 同步文件");
   }
+  if (file.size > MAX_TOKEN_BYTES) throw new Error("同步文件过大，最多支持 10 MB；请确认选择了正确文件");
   const token = await file.text();
   if (!token.trim().startsWith("BM1.") && !token.trim().startsWith("BM2.")) throw new Error("文件内容不是有效的书签桥同步码");
   const db = await openImportDb();
