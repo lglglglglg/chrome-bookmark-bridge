@@ -56,6 +56,16 @@ Chrome Web Store 的商店文案、截图清单和隐私政策见 `STORE_LISTING
 
 欢迎提交 Issue 和 Pull Request。提交前请阅读 [贡献指南](CONTRIBUTING.md)，并确保示例、截图和日志中不含真实书签、同步码或密码。
 
+## 发布包校验
+
+每次修改运行时代码或发布包后，执行以下命令验证 JavaScript 语法、Manifest、ZIP 完整性及 Chrome/Edge 包与源码的一致性：
+
+```bash
+bash scripts/check-extension.sh
+```
+
+仓库中的 GitHub Actions 会在推送和 Pull Request 时运行同一检查。
+
 ## 下一步
 
 - 如确实需要跨设备自动同步，再单独设计端到端加密的中转服务。
