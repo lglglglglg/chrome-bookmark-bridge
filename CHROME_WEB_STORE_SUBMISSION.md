@@ -1,12 +1,12 @@
 # Chrome Web Store 提交操作单
 
-本文件用于在开发者控制台逐项填写；提交前请确认 GitHub 仓库已公开、GitHub Pages 已启用。
+本文件用于未来的 Chrome Web Store 提交；提交前请确认 GitHub 仓库已公开，且隐私政策链接可公开访问。
 
 ## 要上传的文件
 
 - 扩展包：`dist/书签桥-v0.4.7.zip`
 - 商店图标：`icon-128.png`
-- 隐私政策：`https://lglglglglg.github.io/chrome-bookmark-bridge/`
+- 隐私政策：`https://github.com/lglglglglg/chrome-bookmark-bridge/blob/main/PRIVACY_POLICY.md`
 - 商店文字：复制 `STORE_LISTING.md` 中的产品名、短描述和详细描述。
 
 ## 权限说明

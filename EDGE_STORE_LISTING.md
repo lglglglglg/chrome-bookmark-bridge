@@ -7,7 +7,7 @@
 - 版本：0.4.7
 - 发布包：`dist/书签桥-edge-v0.4.7.zip`
 - 项目主页：`https://github.com/lglglglglg/chrome-bookmark-bridge`
-- 隐私政策：`https://lglglglglg.github.io/chrome-bookmark-bridge/`
+- 隐私政策：`https://github.com/lglglglglg/chrome-bookmark-bridge/blob/main/PRIVACY_POLICY.md`
 
 ## 简短描述
 

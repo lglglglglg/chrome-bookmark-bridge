@@ -69,11 +69,11 @@
 
 ## 🚀 下载与安装
 
-### Chrome Web Store 与 Edge Add-ons
+### 当前发布方式
 
-商店版本正在准备中。发布后会在此补充 Chrome Web Store 和 Microsoft Edge Add-ons 的正式安装链接。
+当前项目以开源仓库和 GitHub Releases 为主，提供适用于开发者模式的手动安装包；暂不在 Chrome Web Store 或 Microsoft Edge Add-ons 发布。
 
-### 手动安装预发布包
+### 手动安装包
 
 前往 [GitHub Releases](https://github.com/lglglglglg/chrome-bookmark-bridge/releases) 下载对应浏览器的最新 ZIP：
 
@@ -86,7 +86,7 @@
 2. 点击“加载已解压的扩展程序”。
 3. 选择刚刚解压后的文件夹，并将书签桥固定到工具栏。
 
-> 手动安装包适合测试和开发者模式使用。正式面向普通用户的安装与更新请等待对应浏览器商店版本。
+> 手动安装包适合测试、开源使用和开发者模式。未来如决定发布浏览器商店版本，会在此补充正式安装与自动更新链接。
 
 ### 从源码运行
 

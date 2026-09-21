@@ -45,7 +45,7 @@
 - 密码为可选；设置后使用 Web Crypto AES-GCM 加密，密码不会写入同步码。
 - 请不要把同步码和密码一起发送给不可信对象。
 
-完整隐私政策：[书签桥隐私政策](https://lglglglglg.github.io/chrome-bookmark-bridge/)
+完整隐私政策：[书签桥隐私政策](https://github.com/lglglglglg/chrome-bookmark-bridge/blob/main/PRIVACY_POLICY.md)
 
 ### 已知限制
 

@@ -7,7 +7,7 @@
 - 版本：0.4.7
 - 商店语言：简体中文
 - 官网/项目主页：`https://github.com/lglglglglg/chrome-bookmark-bridge`
-- 隐私政策 URL：`https://lglglglglg.github.io/chrome-bookmark-bridge/`
+- 隐私政策 URL：`https://github.com/lglglglglg/chrome-bookmark-bridge/blob/main/PRIVACY_POLICY.md`
 
 ## 简短描述（132 字符以内）
 
@@ -54,7 +54,7 @@
 
 - [ ] 上传 `icon-128.png` 作为商店图标。
 - [ ] 准备 5 张截图，尺寸符合当前 Chrome Web Store 要求。
-- [ ] 确认 GitHub Pages 隐私政策 URL 已可公开访问。
+- [ ] 确认 GitHub 仓库已公开，且隐私政策 URL 可公开访问。
 - [ ] 在权限说明中解释 `bookmarks`、`clipboardWrite`、`sidePanel` 的用途。
 - [ ] 上传打包后的扩展 ZIP（不要包含 `assets/icon-source.png` 等源素材也可以，保留图标 PNG 即可）。
 - [ ] 用全新 Chrome 配置文件安装 ZIP，完成一次发送、文件导入、错误密码和合并测试。
