@@ -1,6 +1,6 @@
 # 书签桥隐私政策
 
-生效日期：2026-09-19
+生效日期：2026-09-21
 
 书签桥（以下简称“本扩展”）尊重你的隐私。本政策说明本扩展如何处理信息。
 
@@ -38,4 +38,4 @@
 
 如果本扩展未来改变数据处理方式，我们会更新本政策的生效日期和内容。
 
-如有问题或建议，请在 [GitHub Issues](https://github.com/lglglglglg/chrome-bookmark-bridge/issues) 提交；请勿在 Issue 中粘贴真实书签、同步码或密码。
+如有问题或建议，请在 [GitHub Issues](https://github.com/lglglglglg/chrome-bookmark-bridge/issues) 提交，或发送邮件至 `lixiaolongstephan@gmail.com`；请勿在 Issue 或邮件中粘贴真实书签、同步码或密码。
