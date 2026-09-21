@@ -1,7 +1,7 @@
 # 书签桥
 
 <p align="center">
-  <img src="icon-128.png" alt="书签桥 Logo" width="128" height="128">
+  <img src="assets/icon-readme.png" alt="书签桥 Logo" width="128" height="128">
 </p>
 
 <p align="center">
