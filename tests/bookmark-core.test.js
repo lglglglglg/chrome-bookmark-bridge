@@ -9,6 +9,8 @@ const {
   countNodes,
   decodeToken,
   encodeToken,
+  filterDiffEntries,
+  inspectTokenEnvelope,
   isPathExcluded,
   serialiseNode,
 } = require("../bookmark-core.js");
@@ -89,4 +91,27 @@ test("排除文件夹时会同时排除其全部子节点", () => {
   assert.equal(isPathExcluded("1.2.3", excluded), true);
   assert.equal(isPathExcluded("1.20", excluded), false);
   assert.equal(isPathExcluded("2", excluded), false);
+});
+
+test("无需解密即可读取同步码传输属性，但不会泄露书签内容", async () => {
+  const plainToken = await encodeToken(samplePayload, "");
+  const encryptedToken = await encodeToken(samplePayload, "correct-password");
+  assert.deepEqual(inspectTokenEnvelope(plainToken), {
+    format: "BM2",
+    encrypted: false,
+    compression: "none",
+    characters: plainToken.length,
+  });
+  assert.equal(inspectTokenEnvelope(encryptedToken).encrypted, true);
+});
+
+test("差异列表支持按状态和关键词组合筛选", () => {
+  const entries = [
+    { status: "add", kind: "新增书签", path: "书签栏 / OpenAI" },
+    { status: "conflict", kind: "保留冲突书签", path: "工作 / 文档" },
+    { status: "skip", kind: "跳过重复", path: "书签栏 / MDN" },
+  ];
+  assert.equal(filterDiffEntries(entries, "all", "书签栏").length, 2);
+  assert.deepEqual(filterDiffEntries(entries, "conflict", "文档"), [entries[1]]);
+  assert.equal(filterDiffEntries(entries, "skip", "OpenAI").length, 0);
 });

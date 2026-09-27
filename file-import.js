@@ -26,7 +26,7 @@ async function savePendingImport(file) {
   if (!token.trim().startsWith("BM1.") && !token.trim().startsWith("BM2.")) throw new Error("文件内容不是有效的书签桥同步码");
   const db = await openImportDb();
   await new Promise((resolve, reject) => {
-    const request = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({ token, name: file.name, createdAt: Date.now() }, "token");
+    const request = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({ token, name: file.name, size: file.size, createdAt: Date.now() }, "token");
     request.onsuccess = resolve;
     request.onerror = () => reject(request.error);
   });

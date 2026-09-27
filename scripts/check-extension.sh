@@ -10,7 +10,7 @@ node --check bookmark-core.js
 node --check file-import.js
 node --test tests/*.test.js
 
-version="$(node -e "const fs=require('fs'); const manifest=JSON.parse(fs.readFileSync('manifest.json','utf8')); if (!/^\\d+\\.\\d+\\.\\d+$/.test(manifest.version)) throw new Error('manifest 版本格式无效'); if (manifest.manifest_version !== 3) throw new Error('仅支持 Manifest V3'); process.stdout.write(manifest.version);")"
+version="$(node -e "const fs=require('fs'); const manifest=JSON.parse(fs.readFileSync('manifest.json','utf8')); const packageJson=JSON.parse(fs.readFileSync('package.json','utf8')); if (!/^\\d+\\.\\d+\\.\\d+$/.test(manifest.version)) throw new Error('manifest 版本格式无效'); if (manifest.manifest_version !== 3) throw new Error('仅支持 Manifest V3'); if (manifest.version !== packageJson.version) throw new Error('manifest 与 package.json 版本不一致'); process.stdout.write(manifest.version);")"
 chrome_package="dist/书签桥-v${version}.zip"
 edge_package="dist/书签桥-edge-v${version}.zip"
 
@@ -19,6 +19,10 @@ test -f "$edge_package"
 unzip -t "$chrome_package" >/dev/null
 unzip -t "$edge_package" >/dev/null
 cmp -s "$chrome_package" "$edge_package"
+(
+  cd dist
+  shasum -a 256 -c "SHA256SUMS-v${version}.txt" >/dev/null
+)
 
 temporary_directory="$(mktemp -d "${TMPDIR:-/tmp}/bookmark-bridge-check.XXXXXX")"
 trap 'rm -rf "$temporary_directory"' EXIT

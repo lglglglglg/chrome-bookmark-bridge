@@ -4,6 +4,8 @@ const {
   countNodes,
   decodeToken,
   encodeToken,
+  filterDiffEntries,
+  inspectTokenEnvelope,
   isPathExcluded,
   serialiseNode,
 } = BookmarkBridgeCore;
@@ -17,6 +19,10 @@ const state = {
   sendSummary: "",
   mergeHistory: [],
   excludedKeys: new Set(),
+  diffFilter: "all",
+  diffQuery: "",
+  diffVisibleLimit: 100,
+  importedFile: null,
   operation: null,
   progressTimer: null,
   sourceExpanded: false,
@@ -95,7 +101,8 @@ async function consumePendingImport() {
     if (Date.now() - record.createdAt > IMPORT_MAX_AGE) return;
     $("token-input").value = record.token;
     $("file-name").textContent = record.name || "已导入同步文件";
-    setResult("receive-result", "文件已从插件侧边栏载入，请输入同步密码后点击“解密并预览差异”。");
+    state.importedFile = { name: record.name || "已导入同步文件", size: record.size || record.token.length };
+    setResult("receive-result", `${describeTransfer(record.token, state.importedFile)}\n请输入同步密码后点击“解密并预览差异”。`);
   } catch (_) {
     // IndexedDB 不可用时仍可使用粘贴和拖拽导入，不阻断启动。
   }
@@ -115,6 +122,9 @@ function invalidateIncomingPreview() {
   state.incoming = null;
   state.diff = null;
   state.excludedKeys.clear();
+  state.diffFilter = "all";
+  state.diffQuery = "";
+  state.diffVisibleLimit = 100;
   $("preview").classList.add("hidden");
   $("merge-options").classList.add("hidden");
   setResult("receive-result", "同步码已修改，请重新解密并预览差异后再合并。");
@@ -150,6 +160,20 @@ function assertActive(signal) {
 
 function rootLabel(node) {
   return node.id === "bookmark_bar" ? "书签栏" : node.id === "other" ? "其他书签" : node.id === "mobile" ? "移动设备书签" : (node.title || node.id);
+}
+
+function currentBrowserName() {
+  return /Edg\//.test(navigator.userAgent) ? "Edge" : /Chrome\//.test(navigator.userAgent) ? "Chrome" : "Chromium 浏览器";
+}
+
+function describeTransfer(token, file = null) {
+  try {
+    const envelope = inspectTokenEnvelope(token);
+    const fileText = file ? `文件：${file.name}（${Math.max(1, Math.ceil(file.size / 1024)).toLocaleString()} KB）\n` : "";
+    return `${fileText}格式：${envelope.format} ｜ ${envelope.encrypted ? "已加密" : "未加密"} ｜ ${envelope.compression === "gzip" ? "已压缩" : "未压缩"} ｜ ${envelope.characters.toLocaleString()} 字符`;
+  } catch (_) {
+    return file ? `文件：${file.name}（${Math.max(1, Math.ceil(file.size / 1024)).toLocaleString()} KB）` : "";
+  }
 }
 
 function folderEntries(nodes, depth = 0, parentPath = []) {
@@ -229,7 +253,20 @@ async function createToken(signal) {
   assertActive(signal);
   const counts = countNodes(root);
   updateProgress(true, password ? `正在压缩并加密 ${counts.items} 项…` : `正在准备 ${counts.items} 项同步内容…`, 45);
-  const payload = { v: 2, kind: "chrome-bookmark-bridge", createdAt: new Date().toISOString(), root: serialiseNode(root) };
+  const payload = {
+    v: 2,
+    kind: "chrome-bookmark-bridge",
+    createdAt: new Date().toISOString(),
+    metadata: {
+      sourceBrowser: currentBrowserName(),
+      sourceFolder: root.title || "未命名",
+      bookmarks: counts.bookmarks,
+      folders: counts.folders,
+      formatVersion: 2,
+      appVersion: extensionApi.runtime.getManifest().version,
+    },
+    root: serialiseNode(root),
+  };
   const token = await encodeToken(payload, password);
   assertActive(signal);
   $("token-output").value = token;
@@ -255,18 +292,19 @@ function recordDiff(stats, status, kind, path, key) {
   }
 }
 
-function recordNewSubtree(node, path, key, stats, signal, conflict = false) {
+async function recordNewSubtree(node, path, key, stats, signal, conflict = false) {
   assertActive(signal);
   if (node.url) {
     stats.bookmarks += 1;
     if (conflict) stats.conflicts += 1;
     recordDiff(stats, conflict ? "conflict" : "add", conflict ? "保留冲突书签" : "新增书签", path, key);
+    if (stats.total % 100 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
     return;
   }
   stats.folders += 1;
   recordDiff(stats, "add", "新增文件夹", path, key);
   for (const [index, child] of (node.children || []).entries()) {
-    recordNewSubtree(child, `${path} / ${child.title || "未命名"}`, `${key}.${index}`, stats, signal);
+    await recordNewSubtree(child, `${path} / ${child.title || "未命名"}`, `${key}.${index}`, stats, signal);
   }
 }
 
@@ -300,7 +338,7 @@ async function calculateDiff(parentId, children, stats, parentPath, keyPrefix, m
         stats.reusedFolders += 1;
         recordDiff(stats, "reuse", "复用文件夹", path, key);
         await calculateDiff(folder.id, child.children, stats, path, key, mode, conflictMode, signal);
-      } else recordNewSubtree(child, path, key, stats, signal);
+      } else await recordNewSubtree(child, path, key, stats, signal);
     }
   }
 }
@@ -309,10 +347,21 @@ function selectedDiffCount(diff) {
   return diff.entries.filter((item) => item.status !== "skip" && !isPathExcluded(item.key, state.excludedKeys)).length;
 }
 
+function includeDiffPath(pathKey) {
+  for (const key of [...state.excludedKeys]) {
+    if (key === pathKey || key.startsWith(`${pathKey}.`) || pathKey.startsWith(`${key}.`)) state.excludedKeys.delete(key);
+  }
+}
+
+function currentFilteredEntries(diff) {
+  return filterDiffEntries(diff.entries, state.diffFilter, state.diffQuery);
+}
+
 function renderDiffEntries(diff) {
   const list = $("diff-list");
   list.replaceChildren();
-  const visibleEntries = diff.entries.slice(0, 200);
+  const filteredEntries = currentFilteredEntries(diff);
+  const visibleEntries = filteredEntries.slice(0, state.diffVisibleLimit);
   for (const item of visibleEntries) {
     const row = document.createElement("li");
     row.className = item.status;
@@ -323,11 +372,8 @@ function renderDiffEntries(diff) {
     checkbox.disabled = item.status === "skip";
     checkbox.checked = item.status !== "skip" && !isPathExcluded(item.key, state.excludedKeys);
     checkbox.addEventListener("change", () => {
-      if (checkbox.checked) {
-        for (const key of [...state.excludedKeys]) {
-          if (key === item.key || key.startsWith(`${item.key}.`) || item.key.startsWith(`${key}.`)) state.excludedKeys.delete(key);
-        }
-      } else state.excludedKeys.add(item.key);
+      if (checkbox.checked) includeDiffPath(item.key);
+      else state.excludedKeys.add(item.key);
       renderDiffEntries(diff);
     });
     const text = document.createElement("span");
@@ -337,12 +383,82 @@ function renderDiffEntries(diff) {
     list.append(row);
   }
   const selected = selectedDiffCount(diff);
-  $("selection-summary").textContent = `已选择 ${selected} 条可写入项目；取消文件夹会同时排除其子项。`;
+  $("selection-summary").textContent = `全部 ${diff.total.toLocaleString()} 条 ｜ 当前筛选 ${filteredEntries.length.toLocaleString()} 条 ｜ 已选择 ${selected.toLocaleString()} 条可处理项目`;
   $("merge-token").disabled = selected === 0;
-  $("diff-more").textContent = diff.total > visibleEntries.length
-    ? `当前显示前 ${visibleEntries.length} 条，另有 ${diff.total - visibleEntries.length} 条；更多筛选和浏览功能将在 v0.6.0 提供。`
-    : "";
-  $("diff-more").classList.toggle("hidden", diff.total <= visibleEntries.length);
+  $("diff-more").textContent = filteredEntries.length > visibleEntries.length
+    ? `已显示 ${visibleEntries.length.toLocaleString()} 条，还有 ${(filteredEntries.length - visibleEntries.length).toLocaleString()} 条。`
+    : filteredEntries.length ? `已显示当前筛选的全部 ${filteredEntries.length.toLocaleString()} 条。` : "没有匹配的差异。";
+  $("load-more-diff").classList.toggle("hidden", filteredEntries.length <= visibleEntries.length);
+}
+
+function exportDiffReport() {
+  if (!state.diff || !state.incoming) return;
+  const metadata = state.incoming.metadata || {};
+  const lines = [
+    "书签桥差异报告",
+    `导出时间：${new Date().toLocaleString()}`,
+    `来源浏览器：${metadata.sourceBrowser || "未知"}`,
+    `来源文件夹：${state.incoming.root.title || "未命名"}`,
+    `同步内容创建时间：${new Date(state.incoming.createdAt).toLocaleString()}`,
+    `目标位置：${$("destination-root").selectedOptions[0]?.textContent || "未知"}`,
+    "",
+    "处理状态\t类型\t路径",
+    ...state.diff.entries.map((item) => `${item.status === "skip" || isPathExcluded(item.key, state.excludedKeys) ? "不写入" : "写入"}\t${item.kind}\t${item.path}`),
+  ];
+  downloadTextFile(lines.join("\n"), `书签桥差异报告-${new Date().toISOString().slice(0, 10)}.txt`);
+}
+
+function createDiffToolbar(diff) {
+  const toolbar = document.createElement("div");
+  toolbar.className = "diff-toolbar";
+  const search = document.createElement("input");
+  search.id = "diff-search";
+  search.type = "search";
+  search.placeholder = "搜索差异路径";
+  search.value = state.diffQuery;
+  const filter = document.createElement("select");
+  filter.id = "diff-filter";
+  [
+    ["all", "全部状态"],
+    ["add", "新增"],
+    ["conflict", "冲突"],
+    ["reuse", "复用文件夹"],
+    ["skip", "跳过"],
+  ].forEach(([value, label]) => filter.add(new Option(label, value)));
+  filter.value = state.diffFilter;
+  const actions = document.createElement("div");
+  actions.className = "diff-actions";
+  const selectVisible = document.createElement("button");
+  selectVisible.type = "button";
+  selectVisible.textContent = "选择筛选结果";
+  const excludeVisible = document.createElement("button");
+  excludeVisible.type = "button";
+  excludeVisible.textContent = "排除筛选结果";
+  const exportButton = document.createElement("button");
+  exportButton.type = "button";
+  exportButton.textContent = "导出报告";
+  search.addEventListener("input", () => {
+    state.diffQuery = search.value;
+    state.diffVisibleLimit = 100;
+    renderDiffEntries(diff);
+  });
+  filter.addEventListener("change", () => {
+    state.diffFilter = filter.value;
+    state.diffVisibleLimit = 100;
+    renderDiffEntries(diff);
+  });
+  selectVisible.addEventListener("click", () => {
+    currentFilteredEntries(diff).filter((item) => item.status !== "skip").forEach((item) => includeDiffPath(item.key));
+    renderDiffEntries(diff);
+  });
+  excludeVisible.addEventListener("click", () => {
+    currentFilteredEntries(diff).filter((item) => item.status !== "skip").forEach((item) => state.excludedKeys.add(item.key));
+    renderDiffEntries(diff);
+  });
+  exportButton.addEventListener("click", exportDiffReport);
+  actions.append(selectVisible, excludeVisible, exportButton);
+  toolbar.append(search, filter, actions);
+  return toolbar;
 }
 
 async function renderPreview(signal) {
@@ -362,8 +478,10 @@ async function renderPreview(signal) {
   const summary = document.createElement("div");
   summary.className = "preview-summary";
   const contentType = incoming.purpose === "pre-merge-backup" ? "恢复副本" : "同步内容";
-  summary.textContent = `类型：${contentType} ｜ 来源：${incoming.root.title || "未命名"} ｜ 创建时间：${new Date(incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，复用 ${diff.reusedFolders} 个文件夹，跳过 ${diff.skipped} 项，发现 ${diff.conflicts} 个冲突`;
+  const metadata = incoming.metadata || {};
+  summary.textContent = `类型：${contentType} ｜ 来源浏览器：${metadata.sourceBrowser || "旧版同步码未记录"}\n来源：${incoming.root.title || "未命名"} ｜ 创建时间：${new Date(incoming.createdAt).toLocaleString()} ｜ 格式：BM${metadata.formatVersion || incoming.v}\n共 ${sourceCounts.folders.toLocaleString()} 个文件夹、${sourceCounts.bookmarks.toLocaleString()} 个书签 → ${destination}\n预计新增 ${diff.bookmarks.toLocaleString()} 个书签、${diff.folders.toLocaleString()} 个文件夹，复用 ${diff.reusedFolders.toLocaleString()} 个文件夹，跳过 ${diff.skipped.toLocaleString()} 项，发现 ${diff.conflicts.toLocaleString()} 个冲突`;
   preview.append(summary);
+  preview.append(createDiffToolbar(diff));
   const selectionSummary = document.createElement("div");
   selectionSummary.id = "selection-summary";
   selectionSummary.className = "selection-summary";
@@ -374,8 +492,18 @@ async function renderPreview(signal) {
   preview.append(list);
   const more = document.createElement("div");
   more.id = "diff-more";
-  more.className = "diff-more hidden";
+  more.className = "diff-more";
   preview.append(more);
+  const loadMore = document.createElement("button");
+  loadMore.id = "load-more-diff";
+  loadMore.className = "load-more hidden";
+  loadMore.type = "button";
+  loadMore.textContent = "再显示 100 条";
+  loadMore.addEventListener("click", () => {
+    state.diffVisibleLimit += 100;
+    renderDiffEntries(diff);
+  });
+  preview.append(loadMore);
   renderDiffEntries(diff);
   preview.classList.remove("hidden");
 }
@@ -421,11 +549,11 @@ async function mergeChildren(parentId, children, keyPrefix, mode, conflictMode, 
       }
       const created = await extensionApi.bookmarks.create({ parentId, title: child.title, url: child.url });
       stats.bookmarks += 1;
-      stats.createdNodes.push({ id: created.id, type: "bookmark" });
+      stats.createdNodes.push({ id: created.id, type: "bookmark", parentId: created.parentId, title: created.title, url: created.url });
       existing.push(created);
     } else {
       let folder = mode === "smart" ? folderMap.get(child.title) : null;
-      if (!folder) { folder = await extensionApi.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; stats.createdNodes.push({ id: folder.id, type: "folder" }); folderMap.set(child.title, folder); }
+      if (!folder) { folder = await extensionApi.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; stats.createdNodes.push({ id: folder.id, type: "folder", parentId: folder.parentId, title: folder.title }); folderMap.set(child.title, folder); }
       await mergeChildren(folder.id, child.children, pathKey, mode, conflictMode, stats, signal);
     }
   }
@@ -525,6 +653,16 @@ async function undoMerge(index, signal) {
     const node = nodes[nodeIndex];
     try {
       assertActive(signal);
+      const currentNodes = await extensionApi.bookmarks.get(node.id);
+      const current = currentNodes[0];
+      if (!current) continue;
+      const changedByUser = (node.parentId && current.parentId !== node.parentId)
+        || (node.title !== undefined && current.title !== node.title)
+        || (node.url !== undefined && current.url !== node.url);
+      if (changedByUser) {
+        remaining.push(node);
+        continue;
+      }
       // 不使用 removeTree：若用户在合并后手动向该文件夹新增内容，递归删除会误伤用户数据。
       await extensionApi.bookmarks.remove(node.id);
     } catch (error) {
@@ -576,7 +714,9 @@ async function runBusy(buttonId, task) {
 }
 
 function downloadToken() {
-  downloadTextFile($("token-output").value, "书签桥同步码.bookmarkbridge");
+  const selectedName = $("source-root").selectedOptions[0]?.textContent?.trim() || "书签";
+  const safeName = selectedName.replace(/[\\/:*?"<>|]/g, "-").slice(-40);
+  downloadTextFile($("token-output").value, `书签桥-${safeName}-${new Date().toISOString().slice(0, 10)}.bookmarkbridge`);
 }
 
 $("create-token").addEventListener("click", () => runBusy("create-token", createToken).catch((error) => { updateProgress(false); setResult("send-result", error.code === "ABORTED" ? "已取消生成。" : (error.message || String(error)), error.code !== "ABORTED"); }));
@@ -605,11 +745,15 @@ async function importTokenFile(file) {
     if (file.size > MAX_TOKEN_CHARS) throw new Error("同步文件过大，最多支持 10 MB；请确认选择了正确文件");
     state.incoming = null;
     state.excludedKeys.clear();
+    state.diffFilter = "all";
+    state.diffQuery = "";
+    state.diffVisibleLimit = 100;
     $("preview").classList.add("hidden");
     $("merge-options").classList.add("hidden");
     $("token-input").value = await file.text();
     $("file-name").textContent = file.name;
-    setResult("receive-result", "文件已导入，请输入同步密码后点击“预览同步内容”。");
+    state.importedFile = { name: file.name, size: file.size };
+    setResult("receive-result", `${describeTransfer($("token-input").value, state.importedFile)}\n请输入同步密码后点击“解密并预览差异”。`);
   } catch (error) { setResult("receive-result", `文件读取失败：${error.message || error}`, true); }
 }
 
@@ -639,7 +783,6 @@ $("drop-zone").addEventListener("keydown", (event) => { if (event.key === "Enter
     await loadRoots();
     await loadMergeHistory();
     await consumePendingImport();
-    const browserName = /Edg\//.test(navigator.userAgent) ? "Edge" : /Chrome\//.test(navigator.userAgent) ? "Chrome" : "当前浏览器";
-    $("browser-name").textContent = browserName;
+    $("browser-name").textContent = currentBrowserName();
   } catch (error) { setResult("send-result", `无法读取当前书签：${error.message || error}`, true); }
 })();

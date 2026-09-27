@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
   <img src="https://img.shields.io/badge/Edge-Chromium-0078D4?logo=microsoftedge&logoColor=white" alt="Microsoft Edge">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
-  <img src="https://img.shields.io/badge/Version-0.5.0-purple" alt="Version 0.5.0">
+  <img src="https://img.shields.io/badge/Version-0.6.0-purple" alt="Version 0.6.0">
 </p>
 
 ## 关于书签桥
@@ -41,6 +41,8 @@
 - 最近 7 天的合并历史保存在本机，关闭弹窗后仍可继续安全撤销。
 - 合并前可下载目标位置恢复副本，并能逐条排除不想写入的内容。
 - 识别同网址不同标题和同标题不同网址冲突，可选择保留两份或跳过同网址项目。
+- 大型差异列表支持关键词搜索、状态筛选、分批显示和批量选择或排除。
+- 同步文件显示格式、加密、压缩、文件大小和来源浏览器摘要，并可导出完整差异报告。
 
 ## 下载与安装
 
@@ -48,8 +50,8 @@
 
 前往 [GitHub Releases](https://github.com/lglglglglg/chrome-bookmark-bridge/releases) 下载对应浏览器的最新 ZIP：
 
-- Chrome：`书签桥-v0.5.0.zip`
-- Edge：`书签桥-edge-v0.5.0.zip`
+- Chrome：`书签桥-v0.6.0.zip`
+- Edge：`书签桥-edge-v0.6.0.zip`
 
 安装步骤：
 

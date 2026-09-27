@@ -51,6 +51,31 @@
     return false;
   }
 
+  function inspectTokenEnvelope(token) {
+    const compact = token.trim().replace(/\s+/g, "");
+    if (compact.startsWith(LEGACY_TOKEN_PREFIX)) {
+      return { format: "BM1", encrypted: false, compression: "none", characters: compact.length };
+    }
+    if (!compact.startsWith(TOKEN_PREFIX)) throw new Error("同步码格式不正确，应以 BM2. 开头");
+    const envelope = bytesToJson(base64UrlToBytes(compact.slice(TOKEN_PREFIX.length)));
+    if (envelope.v !== 2 || envelope.kind !== "chrome-bookmark-bridge") throw new Error("同步码版本不受支持或内容已损坏");
+    return {
+      format: "BM2",
+      encrypted: envelope.encrypted !== false,
+      compression: envelope.compression || "none",
+      characters: compact.length,
+    };
+  }
+
+  function filterDiffEntries(entries, status, query) {
+    const normalizedQuery = (query || "").trim().toLocaleLowerCase();
+    return entries.filter((entry) => {
+      if (status !== "all" && entry.status !== status) return false;
+      if (!normalizedQuery) return true;
+      return `${entry.kind} ${entry.path}`.toLocaleLowerCase().includes(normalizedQuery);
+    });
+  }
+
   function bytesToBase64Url(bytes) {
     let binary = "";
     for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -232,6 +257,8 @@
     countNodes,
     decodeToken,
     encodeToken,
+    filterDiffEntries,
+    inspectTokenEnvelope,
     isPathExcluded,
     serialiseNode,
   };

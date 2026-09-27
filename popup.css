@@ -66,6 +66,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .result { border-radius: 10px; padding: 10px 11px; margin-top: 11px; font-size: 12px; line-height: 1.5; background: #f0fdf4; color: #166534; white-space: pre-line; }
 .result.error { background: #fff1f2; color: #9f1239; }
 .preview { padding: 11px; border-radius: 10px; background: #f7f8fc; font-size: 12px; line-height: 1.7; margin-top: 10px; white-space: pre-line; border: 1px solid #edf0f6; }
+.preview-summary { overflow-wrap: anywhere; }
+.diff-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 116px; gap: 7px; margin-top: 10px; white-space: normal; }
+.diff-toolbar input, .diff-toolbar select { width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--ink); background: #fff; font: inherit; font-size: 11px; }
+.diff-actions { grid-column: 1 / -1; display: flex; gap: 6px; }
+.diff-actions button { flex: 1; min-height: 32px; padding: 6px; font-size: 10px; }
 .diff-list { max-height: 190px; overflow: auto; margin: 9px 0 0; padding: 0 0 0 18px; font-size: 11px; line-height: 1.6; }
 .diff-list li { padding-left: 2px; }
 .diff-list li.add { color: #166534; }
@@ -77,6 +82,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .diff-choice input:disabled + span { opacity: .65; }
 .selection-summary { margin-top: 8px; padding: 7px 8px; border-radius: 8px; background: #eef2ff; color: #39458b; font-size: 10px; }
 .diff-more { color: #6b7280; font-size: 11px; margin-top: 7px; }
+.load-more { width: 100%; min-height: 32px; margin-top: 7px; padding: 6px; font-size: 11px; }
 .progress-wrap { padding: 10px 11px; border-radius: 12px; background: #fff; border: 1px solid #e8ebf3; box-shadow: 0 5px 18px #1d2c5412; color: #596273; font-size: 11px; margin: 0 0 13px; }
 .progress-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .cancel { min-height: 28px; padding: 4px 9px; font-size: 11px; color: #9f1239; border-color: #fecdd3; }
