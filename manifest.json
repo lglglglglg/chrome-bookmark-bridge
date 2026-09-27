@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
   "name": "书签桥",
-  "description": "用加密同步码在不同 Chrome 配置文件之间安全地传递和合并书签。",
-  "version": "0.4.7",
+  "short_name": "书签桥",
+  "description": "在 Chrome 与 Edge 配置文件之间，用本地加密同步码安全传递、预览和合并书签。",
+  "version": "0.4.8",
+  "minimum_chrome_version": "116",
+  "homepage_url": "https://github.com/lglglglglg/chrome-bookmark-bridge",
   "action": {
     "default_title": "书签桥",
     "default_popup": "popup.html",

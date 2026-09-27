@@ -1,8 +1,10 @@
-# v0.4.7 Chrome / Edge 上架前测试
+# v0.4.8 Chrome / Edge 版本发布测试
 
 这份清单用于在真实的全新浏览器配置文件中验证功能。测试时建议使用演示书签，不要使用真实账号、密码或工作书签。
 
 ## 准备
+
+0. 运行 `npm test`、`npm run package` 和 `npm run check`，确认自动化测试与安装包校验全部通过。
 
 1. 分别打开全新的 Chrome 配置文件和 Edge 配置文件。
 2. 在 `chrome://extensions` 或 `edge://extensions` 开启开发者模式，选择“加载已解压的扩展程序”，指向本项目目录。

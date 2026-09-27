@@ -19,5 +19,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: 运行自动化测试
+        run: npm test
+      - name: 重新生成发布包
+        run: npm run package
       - name: 校验源码和发布包
-        run: bash scripts/check-extension.sh
+        run: npm run check

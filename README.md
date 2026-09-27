@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
   <img src="https://img.shields.io/badge/Edge-Chromium-0078D4?logo=microsoftedge&logoColor=white" alt="Microsoft Edge">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
-  <img src="https://img.shields.io/badge/Version-0.4.7-purple" alt="Version 0.4.7">
+  <img src="https://img.shields.io/badge/Version-0.4.8-purple" alt="Version 0.4.8">
 </p>
 
 ## 关于书签桥
@@ -45,8 +45,8 @@
 
 前往 [GitHub Releases](https://github.com/lglglglglg/chrome-bookmark-bridge/releases) 下载对应浏览器的最新 ZIP：
 
-- Chrome：`书签桥-v0.4.7.zip`
-- Edge：`书签桥-edge-v0.4.7.zip`
+- Chrome：`书签桥-v0.4.8.zip`
+- Edge：`书签桥-edge-v0.4.8.zip`
 
 安装步骤：
 
@@ -87,7 +87,9 @@
 ```bash
 git clone https://github.com/lglglglglg/chrome-bookmark-bridge.git
 cd chrome-bookmark-bridge
-bash scripts/check-extension.sh
+npm test
+npm run package
+npm run check
 ```
 
 校验完成后，可在浏览器扩展管理页直接加载项目根目录。

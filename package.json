@@ -1,0 +1,12 @@
+{
+  "name": "chrome-bookmark-bridge",
+  "version": "0.4.8",
+  "private": true,
+  "description": "在 Chrome 与 Edge 配置文件之间安全传递和合并书签",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "bash scripts/check-extension.sh",
+    "package": "bash scripts/package-extension.sh"
+  },
+  "license": "MIT"
+}
