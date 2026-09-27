@@ -68,6 +68,12 @@
             <label class="radio"><input type="radio" name="merge-mode" value="smart" checked />智能合并：同文件夹内相同网址跳过</label>
             <label class="radio"><input type="radio" name="merge-mode" value="append" />全部添加：保留原有结构</label>
           </fieldset>
+          <fieldset>
+            <legend>处理冲突书签</legend>
+            <label class="radio"><input type="radio" name="conflict-mode" value="keep-both" checked />保留两份：同网址不同标题或同标题不同网址都写入</label>
+            <label class="radio"><input type="radio" name="conflict-mode" value="skip-url" />同网址跳过：即使标题不同也不重复写入</label>
+          </fieldset>
+          <label class="backup-option"><input id="create-backup" type="checkbox" checked />合并前保存目标位置恢复副本（推荐）</label>
           <button id="merge-token" class="primary">确认合并</button>
         </div>
         <div id="receive-result" class="result hidden"></div>
@@ -80,7 +86,7 @@
 
       <div id="merge-history" class="merge-history hidden"></div>
 
-      <footer>v0.4.8 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
+      <footer>v0.5.0 · 加密同步码只保存在你复制或保存的位置，不上传服务器</footer>
     </main>
     <script src="bookmark-core.js"></script>
     <script src="popup.js"></script>

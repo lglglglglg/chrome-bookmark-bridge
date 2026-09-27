@@ -6,8 +6,11 @@ const $ = (id) => document.getElementById(id);
 
 function openImportDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME);
+    const request = indexedDB.open(DB_NAME, 2);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE_NAME)) request.result.createObjectStore(STORE_NAME);
+      if (!request.result.objectStoreNames.contains("mergeHistory")) request.result.createObjectStore("mergeHistory");
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("无法打开导入缓存"));
   });

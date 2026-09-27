@@ -5,9 +5,11 @@ const {
   LEGACY_TOKEN_PREFIX,
   base64UrlToBytes,
   bytesToBase64Url,
+  classifyBookmark,
   countNodes,
   decodeToken,
   encodeToken,
+  isPathExcluded,
   serialiseNode,
 } = require("../bookmark-core.js");
 
@@ -68,4 +70,23 @@ test("继续兼容 BM1 同步码", async () => {
 test("拒绝普通文本和损坏同步码", async () => {
   await assert.rejects(() => decodeToken("普通文本", ""), /BM2/);
   await assert.rejects(() => decodeToken("BM2.broken", ""), /密码错误|同步码已损坏/);
+});
+
+test("识别精确重复、同网址冲突和同标题冲突", () => {
+  const existing = [
+    { title: "OpenAI", url: "https://openai.com/" },
+    { title: "MDN", url: "https://developer.mozilla.org/" },
+  ];
+  assert.equal(classifyBookmark(existing, { title: "OpenAI", url: "https://openai.com/" }), "exact");
+  assert.equal(classifyBookmark(existing, { title: "OpenAI 官网", url: "https://openai.com/" }), "same-url");
+  assert.equal(classifyBookmark(existing, { title: "MDN", url: "https://example.com/" }), "same-title");
+  assert.equal(classifyBookmark(existing, { title: "示例", url: "https://example.com/" }), "new");
+});
+
+test("排除文件夹时会同时排除其全部子节点", () => {
+  const excluded = new Set(["1.2"]);
+  assert.equal(isPathExcluded("1.2", excluded), true);
+  assert.equal(isPathExcluded("1.2.3", excluded), true);
+  assert.equal(isPathExcluded("1.20", excluded), false);
+  assert.equal(isPathExcluded("2", excluded), false);
 });

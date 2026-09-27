@@ -1,26 +1,81 @@
 const {
   MAX_TOKEN_CHARS,
+  classifyBookmark,
   countNodes,
   decodeToken,
   encodeToken,
+  isPathExcluded,
   serialiseNode,
 } = BookmarkBridgeCore;
 // Chromium 浏览器（Chrome、Edge）都提供 chrome 命名空间；保留 browser 兜底便于未来扩展。
 const extensionApi = globalThis.chrome ?? globalThis.browser;
 
 const $ = (id) => document.getElementById(id);
-const state = { roots: [], incoming: null, sendSummary: "", mergeHistory: [], operation: null, progressTimer: null, sourceExpanded: false, lockedControls: [] };
+const state = {
+  roots: [],
+  incoming: null,
+  sendSummary: "",
+  mergeHistory: [],
+  excludedKeys: new Set(),
+  operation: null,
+  progressTimer: null,
+  sourceExpanded: false,
+  lockedControls: [],
+};
 const IMPORT_DB_NAME = "bookmarkBridgeImport";
 const IMPORT_STORE_NAME = "pending";
+const HISTORY_STORE_NAME = "mergeHistory";
 const IMPORT_MAX_AGE = 10 * 60 * 1000;
+const HISTORY_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const HISTORY_MAX_RECORDS = 20;
 
 function openImportDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(IMPORT_DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(IMPORT_STORE_NAME);
+    const request = indexedDB.open(IMPORT_DB_NAME, 2);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(IMPORT_STORE_NAME)) request.result.createObjectStore(IMPORT_STORE_NAME);
+      if (!request.result.objectStoreNames.contains(HISTORY_STORE_NAME)) request.result.createObjectStore(HISTORY_STORE_NAME);
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("无法打开导入缓存"));
   });
+}
+
+function historyRecordForStorage(record) {
+  return {
+    ...record,
+    createdAt: record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt,
+  };
+}
+
+async function persistMergeHistory() {
+  const db = await openImportDb();
+  const records = state.mergeHistory.slice(0, HISTORY_MAX_RECORDS).map(historyRecordForStorage);
+  await new Promise((resolve, reject) => {
+    const request = db.transaction(HISTORY_STORE_NAME, "readwrite").objectStore(HISTORY_STORE_NAME).put(records, "records");
+    request.onsuccess = resolve;
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function loadMergeHistory() {
+  try {
+    const db = await openImportDb();
+    const records = await new Promise((resolve, reject) => {
+      const request = db.transaction(HISTORY_STORE_NAME, "readonly").objectStore(HISTORY_STORE_NAME).get("records");
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+    const cutoff = Date.now() - HISTORY_MAX_AGE;
+    state.mergeHistory = records
+      .filter((record) => new Date(record.createdAt).getTime() >= cutoff && Array.isArray(record.createdNodes))
+      .slice(0, HISTORY_MAX_RECORDS)
+      .map((record) => ({ ...record, createdAt: new Date(record.createdAt) }));
+    await persistMergeHistory();
+    renderMergeHistory();
+  } catch (_) {
+    state.mergeHistory = [];
+  }
 }
 
 async function consumePendingImport() {
@@ -59,6 +114,7 @@ function invalidateIncomingPreview() {
   if (!state.incoming) return;
   state.incoming = null;
   state.diff = null;
+  state.excludedKeys.clear();
   $("preview").classList.add("hidden");
   $("merge-options").classList.add("hidden");
   setResult("receive-result", "同步码已修改，请重新解密并预览差异后再合并。");
@@ -191,73 +247,136 @@ async function createToken(signal) {
   scheduleProgressHide(1200);
 }
 
-function recordDiff(stats, status, kind, path) {
+function recordDiff(stats, status, kind, path, key) {
   stats.total += 1;
-  if (stats.entries.length < 200) stats.entries.push({ status, kind, path });
+  stats.entries.push({ status, kind, path, key });
+  if (stats.expected && (stats.total % 25 === 0 || stats.total === stats.expected)) {
+    updateProgress(true, `正在比较：${stats.total}/${stats.expected} 项`, 35 + Math.min(55, (stats.total / stats.expected) * 55));
+  }
 }
 
-function recordNewSubtree(node, path, stats, signal) {
+function recordNewSubtree(node, path, key, stats, signal, conflict = false) {
   assertActive(signal);
   if (node.url) {
     stats.bookmarks += 1;
-    recordDiff(stats, "add", "新增书签", path);
+    if (conflict) stats.conflicts += 1;
+    recordDiff(stats, conflict ? "conflict" : "add", conflict ? "保留冲突书签" : "新增书签", path, key);
     return;
   }
   stats.folders += 1;
-  recordDiff(stats, "add", "新增文件夹", path);
-  for (const child of node.children || []) recordNewSubtree(child, `${path} / ${child.title || "未命名"}`, stats, signal);
+  recordDiff(stats, "add", "新增文件夹", path, key);
+  for (const [index, child] of (node.children || []).entries()) {
+    recordNewSubtree(child, `${path} / ${child.title || "未命名"}`, `${key}.${index}`, stats, signal);
+  }
 }
 
-async function calculateDiff(parentId, children, stats, parentPath, signal) {
+async function calculateDiff(parentId, children, stats, parentPath, keyPrefix, mode, conflictMode, signal) {
   assertActive(signal);
   const existing = await extensionApi.bookmarks.getChildren(parentId);
-  const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
   const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
-  for (const child of children || []) {
+  for (const [index, child] of (children || []).entries()) {
     assertActive(signal);
     const path = `${parentPath} / ${child.title || "未命名"}`;
+    const key = keyPrefix ? `${keyPrefix}.${index}` : String(index);
     if (child.url) {
-      const duplicate = urlSet.has(`${child.url}\u0000${child.title}`);
-      if (duplicate) { stats.skipped += 1; recordDiff(stats, "skip", "跳过重复", path); }
-      else { stats.bookmarks += 1; recordDiff(stats, "add", "新增书签", path); urlSet.add(`${child.url}\u0000${child.title}`); }
+      const match = classifyBookmark(existing, child);
+      if (mode === "smart" && match === "exact") {
+        stats.skipped += 1;
+        recordDiff(stats, "skip", "跳过精确重复", path, key);
+      } else if (mode === "smart" && match === "same-url" && conflictMode === "skip-url") {
+        stats.skipped += 1;
+        stats.conflicts += 1;
+        recordDiff(stats, "skip", "跳过同网址冲突", path, key);
+      } else {
+        stats.bookmarks += 1;
+        const conflict = match === "same-url" || match === "same-title";
+        if (conflict) stats.conflicts += 1;
+        recordDiff(stats, conflict ? "conflict" : "add", conflict ? "保留冲突书签" : "新增书签", path, key);
+        existing.push(child);
+      }
     } else {
-      const folder = folderMap.get(child.title);
-      if (folder) { stats.reusedFolders += 1; recordDiff(stats, "reuse", "复用文件夹", path); await calculateDiff(folder.id, child.children, stats, path, signal); }
-      else recordNewSubtree(child, path, stats, signal);
+      const folder = mode === "smart" ? folderMap.get(child.title) : null;
+      if (folder) {
+        stats.reusedFolders += 1;
+        recordDiff(stats, "reuse", "复用文件夹", path, key);
+        await calculateDiff(folder.id, child.children, stats, path, key, mode, conflictMode, signal);
+      } else recordNewSubtree(child, path, key, stats, signal);
     }
   }
+}
+
+function selectedDiffCount(diff) {
+  return diff.entries.filter((item) => item.status !== "skip" && !isPathExcluded(item.key, state.excludedKeys)).length;
+}
+
+function renderDiffEntries(diff) {
+  const list = $("diff-list");
+  list.replaceChildren();
+  const visibleEntries = diff.entries.slice(0, 200);
+  for (const item of visibleEntries) {
+    const row = document.createElement("li");
+    row.className = item.status;
+    const label = document.createElement("label");
+    label.className = "diff-choice";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.disabled = item.status === "skip";
+    checkbox.checked = item.status !== "skip" && !isPathExcluded(item.key, state.excludedKeys);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        for (const key of [...state.excludedKeys]) {
+          if (key === item.key || key.startsWith(`${item.key}.`) || item.key.startsWith(`${key}.`)) state.excludedKeys.delete(key);
+        }
+      } else state.excludedKeys.add(item.key);
+      renderDiffEntries(diff);
+    });
+    const text = document.createElement("span");
+    text.textContent = `${item.kind} · ${item.path}`;
+    label.append(checkbox, text);
+    row.append(label);
+    list.append(row);
+  }
+  const selected = selectedDiffCount(diff);
+  $("selection-summary").textContent = `已选择 ${selected} 条可写入项目；取消文件夹会同时排除其子项。`;
+  $("merge-token").disabled = selected === 0;
+  $("diff-more").textContent = diff.total > visibleEntries.length
+    ? `当前显示前 ${visibleEntries.length} 条，另有 ${diff.total - visibleEntries.length} 条；更多筛选和浏览功能将在 v0.6.0 提供。`
+    : "";
+  $("diff-more").classList.toggle("hidden", diff.total <= visibleEntries.length);
 }
 
 async function renderPreview(signal) {
   const incoming = state.incoming;
   if (!incoming) return;
   const destination = $("destination-root").selectedOptions[0]?.textContent || "目标位置";
+  const mode = document.querySelector('input[name="merge-mode"]:checked').value;
+  const conflictMode = document.querySelector('input[name="conflict-mode"]:checked').value;
   const sourceCounts = countNodes(incoming.root);
-  const diff = { bookmarks: 0, folders: 0, skipped: 0, reusedFolders: 0, total: 0, entries: [] };
-  await calculateDiff($("destination-root").value, incoming.root.children, diff, incoming.root.title || "来源", signal);
+  const diff = { bookmarks: 0, folders: 0, skipped: 0, reusedFolders: 0, conflicts: 0, total: 0, expected: sourceCounts.items, entries: [] };
+  await calculateDiff($("destination-root").value, incoming.root.children, diff, incoming.root.title || "来源", "", mode, conflictMode, signal);
   // 预览期间同步码可能被导入或手动修改；此时不渲染已经过期的计算结果。
   if (state.incoming !== incoming) return;
   state.diff = diff;
   const preview = $("preview");
   preview.replaceChildren();
   const summary = document.createElement("div");
-  summary.textContent = `来源：${incoming.root.title || "未命名"} ｜ 创建时间：${new Date(incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，复用 ${diff.reusedFolders} 个文件夹，跳过 ${diff.skipped} 个重复项`;
+  summary.className = "preview-summary";
+  const contentType = incoming.purpose === "pre-merge-backup" ? "恢复副本" : "同步内容";
+  summary.textContent = `类型：${contentType} ｜ 来源：${incoming.root.title || "未命名"} ｜ 创建时间：${new Date(incoming.createdAt).toLocaleString()}\n共 ${sourceCounts.folders} 个文件夹、${sourceCounts.bookmarks} 个书签 → ${destination}\n预计新增 ${diff.bookmarks} 个书签、${diff.folders} 个文件夹，复用 ${diff.reusedFolders} 个文件夹，跳过 ${diff.skipped} 项，发现 ${diff.conflicts} 个冲突`;
   preview.append(summary);
+  const selectionSummary = document.createElement("div");
+  selectionSummary.id = "selection-summary";
+  selectionSummary.className = "selection-summary";
+  preview.append(selectionSummary);
   const list = document.createElement("ul");
+  list.id = "diff-list";
   list.className = "diff-list";
-  for (const item of diff.entries) {
-    const row = document.createElement("li");
-    row.className = item.status;
-    row.textContent = `${item.kind} · ${item.path}`;
-    list.append(row);
-  }
   preview.append(list);
-  if (diff.total > diff.entries.length) {
-    const more = document.createElement("div");
-    more.className = "diff-more";
-    more.textContent = `已显示前 ${diff.entries.length} 条，另有 ${diff.total - diff.entries.length} 条；完整内容仍会按预览结果合并。`;
-    preview.append(more);
-  }
+  const more = document.createElement("div");
+  more.id = "diff-more";
+  more.className = "diff-more hidden";
+  preview.append(more);
+  renderDiffEntries(diff);
   preview.classList.remove("hidden");
 }
 
@@ -280,32 +399,43 @@ async function inspectToken(signal) {
   }
 }
 
-async function mergeChildren(parentId, children, mode, stats, signal) {
+async function mergeChildren(parentId, children, keyPrefix, mode, conflictMode, stats, signal) {
   const existing = mode === "smart" ? await extensionApi.bookmarks.getChildren(parentId) : [];
-  const urlSet = new Set(existing.filter((item) => item.url).map((item) => `${item.url}\u0000${item.title}`));
   const folderMap = new Map(existing.filter((item) => !item.url).map((item) => [item.title, item]));
-  for (const child of children || []) {
+  for (const [index, child] of (children || []).entries()) {
     assertActive(signal);
+    const pathKey = keyPrefix ? `${keyPrefix}.${index}` : String(index);
+    if (isPathExcluded(pathKey, state.excludedKeys)) {
+      const excludedCount = child.url ? 1 : countNodes(child).items + 1;
+      stats.processed += excludedCount;
+      stats.excluded += excludedCount;
+      continue;
+    }
     stats.processed += 1;
     updateProgress(true, `正在合并：${stats.processed}/${stats.total} 项`, 25 + (stats.processed / stats.total) * 70);
     if (child.url) {
-      const key = `${child.url}\u0000${child.title}`;
-      if (mode === "smart" && urlSet.has(key)) { stats.skipped += 1; continue; }
+      const match = classifyBookmark(existing, child);
+      if (mode === "smart" && (match === "exact" || (match === "same-url" && conflictMode === "skip-url"))) {
+        stats.skipped += 1;
+        continue;
+      }
       const created = await extensionApi.bookmarks.create({ parentId, title: child.title, url: child.url });
       stats.bookmarks += 1;
       stats.createdNodes.push({ id: created.id, type: "bookmark" });
-      urlSet.add(key);
+      existing.push(created);
     } else {
       let folder = mode === "smart" ? folderMap.get(child.title) : null;
       if (!folder) { folder = await extensionApi.bookmarks.create({ parentId, title: child.title }); stats.folders += 1; stats.createdNodes.push({ id: folder.id, type: "folder" }); folderMap.set(child.title, folder); }
-      await mergeChildren(folder.id, child.children, mode, stats, signal);
+      await mergeChildren(folder.id, child.children, pathKey, mode, conflictMode, stats, signal);
     }
   }
 }
 
-function addMergeHistory(stats, partial = false) {
+async function addMergeHistory(stats, partial = false) {
   if (!stats.createdNodes.length) return;
   state.mergeHistory.unshift({ createdNodes: [...stats.createdNodes], createdAt: new Date(), bookmarks: stats.bookmarks, folders: stats.folders, skipped: stats.skipped, partial });
+  state.mergeHistory = state.mergeHistory.slice(0, HISTORY_MAX_RECORDS);
+  try { await persistMergeHistory(); } catch (_) { /* IndexedDB 不可用时仍保留本次弹窗会话记录。 */ }
   renderMergeHistory();
 }
 
@@ -316,13 +446,13 @@ function renderMergeHistory() {
   container.classList.remove("hidden");
   const title = document.createElement("div");
   title.className = "history-title";
-  title.textContent = "本次弹窗会话的合并历史";
+  title.textContent = "最近 7 天的合并历史（关闭弹窗后仍可撤销）";
   container.append(title);
   state.mergeHistory.forEach((record, index) => {
     const row = document.createElement("div");
     row.className = "history-row";
     const text = document.createElement("span");
-    text.textContent = `${record.createdAt.toLocaleTimeString()} · 新增 ${record.bookmarks} 个书签、${record.folders} 个文件夹${record.partial ? "（已取消）" : ""}${record.undoPending ? `（${record.createdNodes.length} 项未安全撤销）` : ""}`;
+    text.textContent = `${record.createdAt.toLocaleString()} · 新增 ${record.bookmarks} 个书签、${record.folders} 个文件夹${record.partial ? "（已取消）" : ""}${record.undoPending ? `（${record.createdNodes.length} 项未安全撤销）` : ""}`;
     const button = document.createElement("button");
     button.textContent = "撤销";
     button.addEventListener("click", () => runBusy(button, (signal) => undoMerge(index, signal)).catch((error) => {
@@ -334,21 +464,52 @@ function renderMergeHistory() {
   });
 }
 
+function downloadTextFile(content, filename) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function createRecoveryBackup(signal) {
+  if (!$("create-backup").checked) return false;
+  updateProgress(true, "正在创建合并前恢复副本…", 10);
+  const [root] = await extensionApi.bookmarks.getSubTree($("destination-root").value);
+  assertActive(signal);
+  const password = $("receive-password").value;
+  const payload = {
+    v: 2,
+    kind: "chrome-bookmark-bridge",
+    purpose: "pre-merge-backup",
+    createdAt: new Date().toISOString(),
+    root: serialiseNode(root),
+  };
+  const token = await encodeToken(payload, password.length >= 8 ? password : "");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  downloadTextFile(token, `书签桥-合并前恢复副本-${timestamp}.bookmarkbridge`);
+  return true;
+}
+
 async function mergeToken(signal) {
   if (!state.incoming) return;
   const mode = document.querySelector('input[name="merge-mode"]:checked').value;
-  const stats = { bookmarks: 0, folders: 0, skipped: 0, processed: 0, total: Math.max(1, countNodes(state.incoming.root).items), createdNodes: [] };
+  const conflictMode = document.querySelector('input[name="conflict-mode"]:checked').value;
+  const stats = { bookmarks: 0, folders: 0, skipped: 0, excluded: 0, processed: 0, total: Math.max(1, countNodes(state.incoming.root).items), createdNodes: [] };
   updateProgress(true, "准备合并…", 20);
   try {
-    await mergeChildren($("destination-root").value, state.incoming.root.children, mode, stats, signal);
-    addMergeHistory(stats);
-    setResult("receive-result", `合并完成：新增 ${stats.bookmarks} 个书签、${stats.folders} 个文件夹，跳过 ${stats.skipped} 个重复项。`);
+    const backupCreated = await createRecoveryBackup(signal);
+    await mergeChildren($("destination-root").value, state.incoming.root.children, "", mode, conflictMode, stats, signal);
+    await addMergeHistory(stats);
+    setResult("receive-result", `合并完成：新增 ${stats.bookmarks} 个书签、${stats.folders} 个文件夹，跳过 ${stats.skipped} 个重复项，手动排除 ${stats.excluded} 项。${backupCreated ? "合并前恢复副本已保存到下载目录。" : ""}`);
     updateProgress(true, "合并完成", 100);
     await loadRoots();
     await renderPreview(signal);
     scheduleProgressHide(1200);
   } catch (error) {
-    if (stats.createdNodes.length) addMergeHistory(stats, true);
+    if (stats.createdNodes.length) await addMergeHistory(stats, true);
     updateProgress(false);
     setResult("receive-result", error.code === "ABORTED" ? "已取消合并；已创建内容已记录在合并历史中，可单独撤销。" : `合并失败：${error.message || error}`, error.code !== "ABORTED");
   }
@@ -371,6 +532,7 @@ async function undoMerge(index, signal) {
         remaining.push(...nodes.slice(nodeIndex));
         record.createdNodes = remaining.reverse();
         record.undoPending = true;
+        try { await persistMergeHistory(); } catch (_) { /* 保留内存中的撤销进度。 */ }
         renderMergeHistory();
         throw error;
       }
@@ -381,6 +543,7 @@ async function undoMerge(index, signal) {
   record.createdNodes = remaining.reverse();
   record.undoPending = record.createdNodes.length > 0;
   if (!record.createdNodes.length) state.mergeHistory.splice(index, 1);
+  try { await persistMergeHistory(); } catch (_) { /* 保留内存中的撤销结果。 */ }
   renderMergeHistory();
   await loadRoots();
   if (state.incoming) await renderPreview(signal);
@@ -395,7 +558,7 @@ async function copyToken() {
 
 function setOperationControlsLocked(locked) {
   if (locked) {
-    const controls = document.querySelectorAll("#source-filter, #source-root, #toggle-source-tree, #send-password, #send-password-confirm, #create-token, #token-input, #open-file-import, #receive-password, #inspect-token, #destination-root, input[name='merge-mode'], #merge-token, #merge-history button");
+    const controls = document.querySelectorAll("#source-filter, #source-root, #toggle-source-tree, #send-password, #send-password-confirm, #create-token, #token-input, #open-file-import, #receive-password, #inspect-token, #destination-root, input[name='merge-mode'], input[name='conflict-mode'], #create-backup, #preview input, #merge-token, #merge-history button");
     state.lockedControls = [...controls].map((control) => ({ control, disabled: control.disabled }));
     state.lockedControls.forEach(({ control }) => { control.disabled = true; });
     return;
@@ -413,10 +576,7 @@ async function runBusy(buttonId, task) {
 }
 
 function downloadToken() {
-  const blob = new Blob([$("token-output").value], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a"); anchor.href = url; anchor.download = "书签桥同步码.bookmarkbridge"; anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadTextFile($("token-output").value, "书签桥同步码.bookmarkbridge");
 }
 
 $("create-token").addEventListener("click", () => runBusy("create-token", createToken).catch((error) => { updateProgress(false); setResult("send-result", error.code === "ABORTED" ? "已取消生成。" : (error.message || String(error)), error.code !== "ABORTED"); }));
@@ -431,12 +591,20 @@ $("destination-root").addEventListener("change", () => {
   if (state.operation) return;
   renderPreview().catch((error) => setResult("receive-result", error.message || String(error), true));
 });
+document.querySelectorAll('input[name="merge-mode"], input[name="conflict-mode"]').forEach((control) => {
+  control.addEventListener("change", () => {
+    if (state.operation || !state.incoming) return;
+    state.excludedKeys.clear();
+    runBusy(control, renderPreview).catch((error) => setResult("receive-result", error.message || String(error), true));
+  });
+});
 $("cancel-operation").addEventListener("click", () => { if (state.operation) state.operation.abort(); });
 async function importTokenFile(file) {
   if (!file) return;
   try {
     if (file.size > MAX_TOKEN_CHARS) throw new Error("同步文件过大，最多支持 10 MB；请确认选择了正确文件");
     state.incoming = null;
+    state.excludedKeys.clear();
     $("preview").classList.add("hidden");
     $("merge-options").classList.add("hidden");
     $("token-input").value = await file.text();
@@ -469,6 +637,7 @@ $("drop-zone").addEventListener("keydown", (event) => { if (event.key === "Enter
 (async function init() {
   try {
     await loadRoots();
+    await loadMergeHistory();
     await consumePendingImport();
     const browserName = /Edg\//.test(navigator.userAgent) ? "Edge" : /Chrome\//.test(navigator.userAgent) ? "Chrome" : "当前浏览器";
     $("browser-name").textContent = browserName;

@@ -34,6 +34,23 @@
     };
   }
 
+  function classifyBookmark(existingItems, candidate) {
+    const bookmarks = existingItems.filter((item) => item.url);
+    if (bookmarks.some((item) => item.url === candidate.url && item.title === candidate.title)) return "exact";
+    if (bookmarks.some((item) => item.url === candidate.url)) return "same-url";
+    if (bookmarks.some((item) => item.title === candidate.title)) return "same-title";
+    return "new";
+  }
+
+  function isPathExcluded(pathKey, excludedKeys) {
+    if (!pathKey) return false;
+    const parts = pathKey.split(".");
+    for (let length = parts.length; length > 0; length -= 1) {
+      if (excludedKeys.has(parts.slice(0, length).join("."))) return true;
+    }
+    return false;
+  }
+
   function bytesToBase64Url(bytes) {
     let binary = "";
     for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -211,9 +228,11 @@
     TOKEN_PREFIX,
     base64UrlToBytes,
     bytesToBase64Url,
+    classifyBookmark,
     countNodes,
     decodeToken,
     encodeToken,
+    isPathExcluded,
     serialiseNode,
   };
 

@@ -1,6 +1,6 @@
 {
   "name": "chrome-bookmark-bridge",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "private": true,
   "description": "在 Chrome 与 Edge 配置文件之间安全传递和合并书签",
   "scripts": {
