@@ -5,13 +5,14 @@
 </p>
 
 <p align="center">
-  <b>在 Chrome 与 Edge 配置文件之间传递和合并书签</b><br>
-  不必切换 Google 账号；先查看差异，再决定如何写入目标浏览器。
+  <b>本地优先、可预览、可恢复的书签迁移工具</b><br>
+  在 Chrome 与 Edge 配置文件之间传递和合并书签，无需切换 Google 账号。
 </p>
 
 <p align="center">
   <a href="https://github.com/lglglglglg/chrome-bookmark-bridge/releases">下载</a> ·
   <a href="https://github.com/lglglglglg/chrome-bookmark-bridge/issues">问题反馈</a> ·
+  <a href="https://github.com/lglglglglg/chrome-bookmark-bridge/security/advisories/new">安全报告</a> ·
   <a href="PRIVACY_POLICY.md">隐私政策</a>
 </p>
 
@@ -37,8 +38,7 @@
 - 提供“智能合并”和“全部添加”两种策略。
 - 支持为同步内容设置密码，并使用 Web Crypto AES-GCM 加密。
 - 为压缩、加密、预览和合并显示进度，处理过程中可以取消。
-- 保留当前会话的合并历史，可撤销单次合并并保护之后手动加入的内容。
-- 最近 7 天的合并历史保存在本机，关闭弹窗后仍可继续安全撤销。
+- 最近 7 天、最多 20 次的合并历史保存在本机；关闭弹窗后仍可继续安全撤销，并保护之后手动加入的内容。
 - 合并前可下载目标位置恢复副本，并能逐条排除不想写入的内容。
 - 识别同网址不同标题和同标题不同网址冲突，可选择保留两份或跳过同网址项目。
 - 大型差异列表支持关键词搜索、状态筛选、分批显示和批量选择或排除。
@@ -102,17 +102,16 @@ npm run check
 ## 开源与支持
 
 - [问题反馈](https://github.com/lglglglglg/chrome-bookmark-bridge/issues)
+- [私密安全报告](https://github.com/lglglglglg/chrome-bookmark-bridge/security/advisories/new)
 - [贡献指南](CONTRIBUTING.md)
 - [隐私政策](PRIVACY_POLICY.md)
 - [安全说明](SECURITY.md)
 - [更新记录](CHANGELOG.md)
 
-提交 Issue、截图或日志时，请勿附带真实书签网址、同步码、密码或账号信息。
+欢迎通过 GitHub Issues 提交使用建议和可复现问题。安全漏洞请使用私密安全报告，不要在公开 Issue、截图或日志中附带真实书签网址、同步码、密码或账号信息。
 
 ## 许可证与版权
 
 书签桥基于 [MIT License](LICENSE) 开源。
 
 © 2026 **Stephan Li** · 韩十久工作室（Hanshijiu Studio）
-
-联系邮箱：`lixiaolongstephan@gmail.com`

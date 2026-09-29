@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: 安全问题反馈
-    url: mailto:lixiaolongstephan@gmail.com
+    url: https://github.com/lglglglglg/chrome-bookmark-bridge/security/advisories/new
     about: 请勿公开提交可能导致书签泄露、误删除或加密绕过的问题。
   - name: 隐私政策
     url: https://github.com/lglglglglg/chrome-bookmark-bridge/blob/main/PRIVACY_POLICY.md

@@ -19,7 +19,7 @@
 - 版权所有：© 2026 Stephan Li（韩十久工作室 · Hanshijiu Studio）
 - 工作室：韩十久工作室（Hanshijiu Studio）
 - 主理人：Stephan Li
-- 公开联系邮箱：`lixiaolongstephan@gmail.com`
+- 公开支持渠道：GitHub Issues；安全与隐私问题通过 GitHub 私密安全报告处理。
 - LICENSE 版权行：`Copyright (c) 2026 Stephan Li (Hanshijiu Studio)`
 - 开源协议：MIT License
 

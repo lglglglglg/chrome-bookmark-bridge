@@ -6,7 +6,7 @@
 
 请不要在公开 Issue 中粘贴完整同步码、密码、真实书签、账号信息或任何令牌。
 
-如果你发现可能导致书签泄露、错误删除、绕过加密或权限滥用的问题，请发送最小化复现说明至 `lixiaolongstephan@gmail.com`。请使用虚构书签和已脱敏截图；我们会先确认问题，再决定公开披露时间。
+如果你发现可能导致书签泄露、错误删除、绕过加密或权限滥用的问题，请通过 [GitHub 私密安全报告](https://github.com/lglglglglg/chrome-bookmark-bridge/security/advisories/new) 提交最小化复现说明。请使用虚构书签和已脱敏截图；我们会先确认问题，再决定公开披露时间。
 
 一般使用问题、界面建议和不含敏感内容的 Bug，欢迎通过 [GitHub Issues](https://github.com/lglglglglg/chrome-bookmark-bridge/issues) 提交。
 
